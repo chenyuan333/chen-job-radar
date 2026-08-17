@@ -33,10 +33,10 @@ CITY_KEYWORDS = [
 
 # 可靠性判断关键词
 OFFICIAL_KEYWORDS = [
-    ".gov.cn", ".edu.cn", "人民医院", "中心医院", "附属医院",
+    "人民医院", "中心医院", "附属医院",
     "中医院", "妇幼保健", "卫健委", "疾控中心", "教育局",
     "卫生健康局", "人社局", "事业单位",
-]
+]  # 注意：detect_reliability() 不再用此列表做信源判定，仅保留作其他可能用途
 
 THIRD_PARTY_DOMAINS = [
     "jobmd", "kq36", "fenbi", "51jOB", "yingjiesheng", "yingjishi",
@@ -65,20 +65,22 @@ def detect_cities(text):
 
 
 def detect_reliability(url, title=""):
-    """判断信息可靠性：官方 / 第三方 / 待审"""
+    """判断信息可靠性：官方 / 第三方 / 待审
+
+    收紧版：仅信任政府/教育域名和主流招聘平台。
+    不再因标题含"中心医院/卫健委"等关键词就标为官方——
+    因为 Tavily 召回片段太短，标题里出现关键词不等于页面就是岗位公告。
+    副作用：医院官网（xxx-hospital.com.cn）的招聘页会被判为"待审"
+            并被 Tavily 自动搜索过滤掉；这类岗位通常也会在 .gov.cn 同步发布。
+    """
     u = (url or "").lower()
-    t = title or ""
-    # 官方域名
+    # 官方域名（政府/教育）
     if ".gov.cn" in u or ".edu.cn" in u:
         return "官方"
-    # 第三方平台
+    # 第三方平台（招聘网站）
     for d in THIRD_PARTY_DOMAINS:
         if d in u:
             return "第三方"
-    # 标题含官方信源关键词
-    for kw in OFFICIAL_KEYWORDS:
-        if kw in t:
-            return "官方"
     return "待审"
 
 

@@ -173,6 +173,7 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
     all_results = []
     seen_urls = set()
     summary_per_query = []
+    skipped_low_quality = []  # 信源过滤：被丢弃的"待审"噪音
 
     for query, city in queries:
         results = _tavily_search_one(query, max_results=max_per_query, days=days)
@@ -189,6 +190,20 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
             content = res.get("content", "")
             if not title:
                 continue
+
+            # === 信源白名单过滤（防噪音） ===
+            reliability = parser.detect_reliability(url, title)
+            if reliability == "待审":
+                # Tavily 对宽泛关键词常召回"医院首页/机构名单"等无关页面，
+                # 这些页面的 content 片段无法被判别为岗位，直接丢弃。
+                skipped_low_quality.append({
+                    "url": url,
+                    "title": title[:60],
+                    "reason": "信源等级=待审（非.gov.cn/招聘平台/医院关键词）",
+                })
+                continue
+            # === 过滤结束 ===
+
             # 把 Tavily 拿到的结构化文本喂给 parser
             blob = f"{title} | {url}\n{content}"
             items = parser.parse_bulk_lines(blob)
@@ -216,7 +231,8 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
             "inserted": 0, "duplicate": 0, "invalid": 0,
             "queries": summary_per_query,
             "items": [],
-            "note": "搜索完成，但未解析到结构化岗位。可能是 Tavily 结果不够结构化，可手动到招聘页面粘贴更精确的结果。",
+            "skipped_low_quality": skipped_low_quality[:10],
+            "note": "搜索完成，但未解析到结构化岗位（可能所有结果被信源过滤掉了，或 Tavily 结果不够结构化）。",
         }
 
     # 过滤过期 + URL 合法
@@ -252,6 +268,8 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
     return {
         "queries": summary_per_query,
         "found": len(all_results),
+        "skipped_low_quality_count": len(skipped_low_quality),
+        "skipped_low_quality_samples": skipped_low_quality[:5],
         "expired_filtered": expired,
         "inserted": result["inserted"],
         "duplicate": result["duplicate"],
