@@ -1,0 +1,24 @@
+# 忽略环境/数据库文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
+venv/
+env/
+
+# 数据库（云端会重新创建）
+*.db
+service.log
+nohup.out
+
+# 临时 ETL 脚本
+tools/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

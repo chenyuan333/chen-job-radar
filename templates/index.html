@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🍊 陈医生岗位雷达</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <!-- ===== 顶部栏 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🍊</span>
+      <h1>陈医生岗位雷达</h1>
+      <span class="subtitle">·  全网医疗岗位动态聚合</span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-tavily">🌐 自动联网搜索</button>
+      <button class="btn btn-primary" id="btn-paste">📥 粘贴抓取</button>
+      <button class="btn" id="btn-add">➕ 手动添加</button>
+      <button class="btn" id="btn-sweep">🧹 扫描过期</button>
+      <button class="btn btn-ghost" id="btn-export">📤 导出 CSV</button>
+      <button class="btn btn-ghost" id="btn-health">🔧</button>
+    </div>
+  </header>
+
+  <!-- ===== 统计条 ===== -->
+  <section class="stats" id="stats">
+    <div class="stat"><span class="stat-num" id="stat-total">-</span><span class="stat-label">总岗位</span></div>
+    <div class="stat"><span class="stat-num" id="stat-new">-</span><span class="stat-label">今日新增</span></div>
+    <div class="stat"><span class="stat-num" id="stat-saved">-</span><span class="stat-label">已收藏</span></div>
+    <div class="stat"><span class="stat-num" id="stat-applied">-</span><span class="stat-label">已投递</span></div>
+    <div class="stat"><span class="stat-num" id="stat-bianzhi">-</span><span class="stat-label">编内</span></div>
+    <div class="stat stat-meta"><span class="stat-num" id="stat-last">-</span><span class="stat-label">最近抓取</span></div>
+  </section>
+
+  <!-- ===== 主体两栏 ===== -->
+  <main class="layout">
+    <!-- 左侧筛选 -->
+    <aside class="sidebar">
+      <h3>筛选</h3>
+      <div class="filter-group">
+        <label>关键词搜索</label>
+        <input type="text" id="f-q" placeholder="标题 / 医院" />
+      </div>
+      <div class="filter-group">
+        <label>岗位类别</label>
+        <div class="chip-row" id="f-category">
+          <button class="chip active" data-val="">全部</button>
+          <button class="chip" data-val="体检科">体检科</button>
+          <button class="chip" data-val="心电图">心电图</button>
+          <button class="chip" data-val="社区医师">社区医师</button>
+          <button class="chip" data-val="校医">校医</button>
+          <button class="chip" data-val="卫健委">卫健委</button>
+          <button class="chip" data-val="疾控中心">疾控中心</button>
+          <button class="chip" data-val="AI医疗">AI医疗</button>
+          <button class="chip" data-val="其他">其他</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>城市</label>
+        <select id="f-city">
+          <option value="">全部</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>可靠性</label>
+        <div class="chip-row" id="f-reliability">
+          <button class="chip active" data-val="">全部</button>
+          <button class="chip" data-val="官方">✅ 官方</button>
+          <button class="chip" data-val="第三方">⚠ 第三方</button>
+          <button class="chip" data-val="待审">❓ 待审</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>用户状态</label>
+        <div class="chip-row" id="f-user_status">
+          <button class="chip active" data-val="">全部</button>
+          <button class="chip" data-val="new">🆕 未处理</button>
+          <button class="chip" data-val="read">👀 已读</button>
+          <button class="chip" data-val="saved">⭐ 已收藏</button>
+          <button class="chip" data-val="applied">📮 已投递</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label>额外</label>
+        <label class="check"><input type="checkbox" id="f-hide-expired" /> 隐藏已过期</label>
+        <label class="check"><input type="checkbox" id="f-bianzhi" /> 仅编内</label>
+        <label class="check"><input type="checkbox" id="f-fresh" /> 仅今日新增</label>
+      </div>
+      <button class="btn btn-block" id="btn-reset">重置筛选</button>
+    </aside>
+
+    <!-- 右侧卡片流 -->
+    <section class="content">
+      <div class="content-header">
+        <span id="result-count">加载中...</span>
+        <span class="hint" id="last-crawl-hint"></span>
+      </div>
+      <div class="job-grid" id="job-grid"></div>
+      <div class="empty" id="empty-state" hidden>
+        <p>暂无岗位</p>
+        <p class="hint">试试点击「📥 粘贴抓取」从搜索结果添加，或「➕ 手动添加」单条岗位</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== Modal: 粘贴抓取 ===== -->
+  <div class="modal" id="modal-paste" hidden>
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2>📥 粘贴搜索结果</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">支持两种格式：</p>
+        <ul class="hint">
+          <li><b>逐行格式</b>（推荐）：每行 <code>标题 | 医院 | URL</code></li>
+          <li><b>整段网页</b>：从浏览器复制整个搜索结果页文本，自动抽取 URL</li>
+        </ul>
+        <textarea id="paste-text" rows="12" placeholder="例如：
+体检科医师 FY007 | 东莞市妇幼保健院 | https://dghb.dg.gov.cn/post_xxx.html
+心电图医师 FY010 | 东莞市妇幼保健院 | https://dghb.dg.gov.cn/post_yyy.html"></textarea>
+        <div class="row">
+          <label>来源标签：<input type="text" id="paste-source" value="手动粘贴" /></label>
+        </div>
+        <div class="row preview-row">
+          <div id="paste-preview"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="btn-paste-preview">🔍 预览解析</button>
+        <button class="btn btn-primary" id="btn-paste-confirm">入库</button>
+        <button class="btn btn-ghost" data-close>取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Modal: 手动添加 ===== -->
+  <div class="modal" id="modal-add" hidden>
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2>➕ 手动添加岗位</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>URL *</label>
+          <div class="row">
+            <input type="text" id="add-url" placeholder="https://..." />
+            <button class="btn" id="btn-fetch-url">从 URL 自动识别</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>标题 *</label>
+          <input type="text" id="add-title" />
+        </div>
+        <div class="form-row grid-2">
+          <div><label>医院</label><input type="text" id="add-hospital" /></div>
+          <div><label>城市</label><input type="text" id="add-city" /></div>
+        </div>
+        <div class="form-row grid-2">
+          <div>
+            <label>类别</label>
+            <select id="add-category">
+              <option value="体检科">体检科</option>
+              <option value="心电图">心电图</option>
+              <option value="社区医师">社区医师</option>
+              <option value="校医">校医</option>
+              <option value="卫健委">卫健委</option>
+              <option value="疾控中心">疾控中心</option>
+              <option value="AI医疗">AI医疗</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+          <div>
+            <label>可靠性</label>
+            <select id="add-reliability">
+              <option value="官方">✅ 官方</option>
+              <option value="第三方">⚠ 第三方</option>
+              <option value="待审">❓ 待审</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row grid-3">
+          <div><label>发布日期</label><input type="text" id="add-publish" placeholder="YYYY-MM-DD" /></div>
+          <div><label>截止日期</label><input type="text" id="add-deadline" placeholder="YYYY-MM-DD" /></div>
+          <div><label>薪资</label><input type="text" id="add-salary" placeholder="如：15-20K" /></div>
+        </div>
+        <div class="form-row">
+          <label><input type="checkbox" id="add-bianzhi" /> 是否编内（事业编制）</label>
+        </div>
+        <div class="form-row">
+          <label>备注</label>
+          <textarea id="add-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" id="btn-add-confirm">保存</button>
+        <button class="btn btn-ghost" data-close>取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- ===== Modal: Tavily 自动联网搜索 ===== -->
+  <div class="modal" id="modal-tavily" hidden>
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2>🌐 自动联网搜索</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">用 Tavily 联网拉取最近 60 天 6 类岗位 × 东莞/广州/深圳的结果，自动解析入库。</p>
+        <div class="form-row grid-2">
+          <div>
+            <label>搜索时间窗（天）</label>
+            <input type="number" id="tavily-days" value="60" min="7" max="365" />
+          </div>
+          <div>
+            <label>每关键词最多返回条数</label>
+            <input type="number" id="tavily-max" value="8" min="1" max="20" />
+          </div>
+        </div>
+        <div class="form-row">
+          <label>关键词组合（每行一条：<code>关键词 | 城市</code>，留空用默认）</label>
+          <textarea id="tavily-queries" rows="8" placeholder="体检科医师 招聘 2026 | 东莞
+心电图医师 招聘 2026 | 东莞
+..."></textarea>
+        </div>
+        <div class="hint" id="tavily-config-hint"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" id="btn-tavily-run">🚀 立即搜索</button>
+        <button class="btn btn-ghost" data-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Modal: 服务状态 ===== -->
+  <div class="modal" id="modal-health" hidden>
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2>🔧 服务状态</h2>
+        <button class="close" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div id="health-info"></div>
+        <h4 style="margin-top:18px">最近抓取日志</h4>
+        <div id="health-logs"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" data-close>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Render.com 一键部署
+# 用法：把这个项目推到 GitHub → 在 render.com 创建 New Web Service → 选这个仓库
+# Render 会自动读 render.yaml，所有环境配好。
+services:
+  - type: web
+    name: chen-job-radar
+    runtime: python
+    plan: free  # 免费层（足够个人使用）
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -b 0.0.0.0:$PORT -w 2 --timeout 120 wsgi:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.2
+      - key: ENABLE_SCHEDULER
+        value: "1"  # 开启每日 08:00 自动 Tavily 搜索
+      # 可选：填了就有联网搜索能力
+      # - key: TAVILY_API_KEY
+      #   value: tvly-xxxxxxxxxxxxxx
+      # 可选：写死密码访问（防被搜索引擎抓到你的私人岗位库）
+      # - key: ACCESS_TOKEN
+      #   value: 自定义一个复杂密码
+    healthCheckPath: /api/health
