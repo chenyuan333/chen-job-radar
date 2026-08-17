@@ -21,7 +21,8 @@ import database
 import parser
 
 
-# 默认搜索关键词组合（6 类岗位 × 2 城市），用户可改
+# 默认搜索关键词组合（6 类岗位 × 东莞/广州）
+# 陈医生 2026-08-17 明确：只要东莞和广州，其他城市不要
 DEFAULT_SEARCH_QUERIES = [
     # 体检科 / 健康管理中心
     ("体检科医师 招聘 2026", "东莞"),
@@ -39,11 +40,14 @@ DEFAULT_SEARCH_QUERIES = [
     ("中小学 校医 招聘 2026 编制", "广州"),
     # 卫健委 / 疾控
     ("卫健委 招聘 事业编 2026", "东莞"),
-    ("疾控中心 事业编 招聘 2026", "广东"),
+    ("疾控中心 事业编 招聘 2026", "广州"),
     # AI 医疗
-    ("AI 医疗 临床医学经理 招聘 2026", "深圳"),
-    ("医学经理 心血管 招聘 2026", "深圳"),
+    ("AI 医疗 临床医学经理 招聘 2026", "广州"),
+    ("医学经理 心血管 招聘 2026", "广州"),
 ]
+
+# 城市白名单：入库前用此清单过滤，非白名单城市的岗位自动丢弃
+ALLOWED_CITIES = ["东莞", "广州"]
 
 
 def crawl_from_paste(text, source_label="手动粘贴"):
@@ -235,15 +239,25 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
             "note": "搜索完成，但未解析到结构化岗位（可能所有结果被信源过滤掉了，或 Tavily 结果不够结构化）。",
         }
 
-    # 过滤过期 + URL 合法
+    # 过滤过期 + URL 合法 + 城市白名单
     valid_items = []
     expired = 0
+    skipped_wrong_city = 0
     for it in all_results:
         if it.get("deadline"):
             if parser.is_likely_expired(it["deadline"]) is True:
                 expired += 1
                 continue
         if not it.get("url", "").startswith(("http://", "https://")):
+            continue
+        # 城市白名单过滤：检测标题+内容里的城市，若出现非白名单城市则丢弃
+        # （Tavily 搜"东莞 心电图"也可能召回深圳/上海的招聘）
+        city_in_text = parser.detect_cities(
+            it.get("title", "") + " " + it.get("hospital", "") + " " + it.get("source", "")
+        )
+        wrong_city = [c for c in city_in_text if c not in ALLOWED_CITIES]
+        if wrong_city:
+            skipped_wrong_city += 1
             continue
         valid_items.append(it)
 
@@ -270,6 +284,7 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
         "found": len(all_results),
         "skipped_low_quality_count": len(skipped_low_quality),
         "skipped_low_quality_samples": skipped_low_quality[:5],
+        "skipped_wrong_city": skipped_wrong_city,
         "expired_filtered": expired,
         "inserted": result["inserted"],
         "duplicate": result["duplicate"],
