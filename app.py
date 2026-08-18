@@ -190,7 +190,7 @@ def api_settings():
 @app.route("/api/export", methods=["GET"])
 def api_export():
     fmt = request.args.get("format", "csv").lower()
-    jobs = database.list_jobs()
+    jobs = database.list_jobs({"city": ""})  # 空 city 会触发默认东莞/广州白名单过滤
     if fmt == "json":
         return Response(
             json.dumps({"jobs": jobs, "exported_at": datetime.now().isoformat()}, ensure_ascii=False, indent=2),

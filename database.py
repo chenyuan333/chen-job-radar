@@ -55,12 +55,15 @@ CREATE TABLE IF NOT EXISTS settings (
 
 # 初始化默认设置
 DEFAULT_SETTINGS = {
-    "default_keywords": "东莞 体检科医师\n东莞 心电图医师\n东莞 全科医师\n东莞 校医\n东莞 疾控\n东莞 AI医疗",
-    "default_city": "东莞",
+    "default_keywords": "东莞 体检科医师\n东莞 心电图医师\n东莞 全科医师\n东莞 校医\n东莞 疾控\n广州 体检科医师\n广州 心电图医师\n广州 全科医师\n广州 校医",
+    "default_city": "东莞,广州",
     "default_categories": '["体检科","心电图","社区医师","校医","卫健委","疾控中心","AI医疗","其他"]',
     "schedule_enabled": "false",
     "last_crawl_at": "",
 }
+
+# 岗位雷达仅服务陈医生关注的东莞、广州两地
+ALLOWED_CITIES = ["东莞", "广州"]
 
 
 @contextmanager
@@ -181,9 +184,13 @@ def list_jobs(filters=None):
     if filters.get("category"):
         where.append("category=?")
         params.append(filters["category"])
+    # 未指定城市时，默认只返回东莞/广州岗位；指定城市则严格按该城市过滤
     if filters.get("city"):
         where.append("city=?")
         params.append(filters["city"])
+    else:
+        where.append("city IN (?,?)")
+        params.extend(ALLOWED_CITIES)
     if filters.get("user_status"):
         where.append("user_status=?")
         params.append(filters["user_status"])
@@ -250,10 +257,12 @@ def stats():
         applied = conn.execute("SELECT COUNT(*) c FROM jobs WHERE user_status='applied'").fetchone()["c"]
         bianzhi = conn.execute("SELECT COUNT(*) c FROM jobs WHERE has_bianzhi=1").fetchone()["c"]
         by_cat = conn.execute(
-            "SELECT category, COUNT(*) c FROM jobs WHERE status!='expired' GROUP BY category ORDER BY c DESC"
+            "SELECT category, COUNT(*) c FROM jobs WHERE status!='expired' AND city IN (?,?) GROUP BY category ORDER BY c DESC",
+            tuple(ALLOWED_CITIES)
         ).fetchall()
         by_city = conn.execute(
-            "SELECT city, COUNT(*) c FROM jobs WHERE status!='expired' GROUP BY city ORDER BY c DESC"
+            "SELECT city, COUNT(*) c FROM jobs WHERE status!='expired' AND city IN (?,?) GROUP BY city ORDER BY c DESC",
+            tuple(ALLOWED_CITIES)
         ).fetchall()
     return {
         "total": total,

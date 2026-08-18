@@ -475,23 +475,15 @@ function debounce(fn, ms) {
 }
 
 // ===== 加载城市选项 =====
+// 城市已在前端模板中写死为「东莞 / 广州」，不再动态从数据库加载，
+// 避免其他城市岗位误入下拉框。
 async function loadCities() {
-  try {
-    const stats = await api(API.stats);
-    const sel = $('#f-city');
-    stats.by_city.forEach(c => {
-      if (!c.city) return;
-      const opt = document.createElement('option');
-      opt.value = c.city;
-      opt.textContent = `${c.city} (${c.c})`;
-      sel.appendChild(opt);
-    });
-  } catch (e) { /* ignore */ }
+  // 预留空函数，保持兼容性
 }
 
 // ===== 初始化 =====
 (async () => {
-  await Promise.all([loadStats(), loadJobs(), loadCities()]);
+  await Promise.all([loadStats(), loadJobs()]);
   // 每 60 秒自动刷新统计
   setInterval(() => { loadStats(); }, 60000);
 })();

@@ -252,11 +252,23 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
             continue
         # 城市白名单过滤：检测标题+内容里的城市，若出现非白名单城市则丢弃
         # （Tavily 搜"东莞 心电图"也可能召回深圳/上海的招聘）
-        city_in_text = parser.detect_cities(
-            it.get("title", "") + " " + it.get("hospital", "") + " " + it.get("source", "")
+        text_for_city = (
+            it.get("title", "") + " " +
+            it.get("hospital", "") + " " +
+            it.get("source", "")
         )
+        city_in_text = parser.detect_cities(text_for_city)
         wrong_city = [c for c in city_in_text if c not in ALLOWED_CITIES]
         if wrong_city:
+            skipped_wrong_city += 1
+            continue
+        # 第二道：省份/外省城市关键词过滤
+        # （有些 title 不含城市名但含省份，如"福建中医药大学附属第二人民医院"）
+        wrong_region = [
+            kw for kw in parser.NON_TARGET_REGION_KEYWORDS
+            if kw in text_for_city
+        ]
+        if wrong_region:
             skipped_wrong_city += 1
             continue
         valid_items.append(it)
