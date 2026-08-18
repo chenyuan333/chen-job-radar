@@ -18,7 +18,6 @@ def main():
             j.get("title", ""),
             j.get("hospital", ""),
             j.get("description", ""),
-            j.get("source", ""),
         ])
         if parser.has_wrong_region(text):
             database.update_job(j["id"], {"status": "expired"})

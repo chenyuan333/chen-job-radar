@@ -225,8 +225,8 @@ def get_job(job_id):
 
 
 def update_job(job_id, fields):
-    """更新字段：user_status, notes, deadline, status, category, hospital"""
-    allowed = {"user_status", "notes", "deadline", "status", "category", "hospital", "reliability"}
+    """更新字段：user_status, notes, deadline, status, category, hospital, city, reliability"""
+    allowed = {"user_status", "notes", "deadline", "status", "category", "hospital", "city", "reliability"}
     sets = []
     params = []
     for k in allowed:

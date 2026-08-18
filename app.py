@@ -29,11 +29,12 @@ def cleanup_on_startup():
         database.init_db()
         jobs = database.list_jobs(filters={"status": "active"})
         for j in jobs:
+            # 判断真实地点时只看 title/hospital/description，
+            # 避免 source/query 关键词里的"东莞/广州"污染判断
             text = " ".join([
                 j.get("title", ""),
                 j.get("hospital", ""),
                 j.get("description", ""),
-                j.get("source", ""),
             ])
             if parser.has_wrong_region(text):
                 database.update_job(j["id"], {"status": "expired"})

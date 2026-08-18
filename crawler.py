@@ -218,13 +218,13 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
                 filtered_items = []
                 for it in items:
                     it["source"] = f"tavily:{query}"
-                    # 用更完整的内容重新识别城市
+                    # 用更完整的内容重新识别城市（注意：不要加入 source/query，
+                    # 否则查询关键词里的"东莞/广州"会污染真实地点判断）
                     full_text = " ".join([
                         it.get("title", ""),
                         it.get("hospital", ""),
                         it.get("description", ""),
                         content,
-                        it.get("source", ""),
                     ])
                     # 严格过滤：文本必须明确指向东莞或广州
                     if parser.has_wrong_region(full_text):
@@ -267,12 +267,11 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
                 continue
         if not it.get("url", "").startswith(("http://", "https://")):
             continue
-        # 城市白名单过滤：用更完整文本做最终复核
+        # 城市白名单过滤：用真实内容做最终复核（不含 source/query 关键词）
         text_for_city = (
             it.get("title", "") + " " +
             it.get("hospital", "") + " " +
-            it.get("description", "") + " " +
-            it.get("source", "")
+            it.get("description", "")
         )
         # 必须明确指向东莞/广州，且不能是泛化聚合页
         if parser.has_wrong_region(text_for_city):
