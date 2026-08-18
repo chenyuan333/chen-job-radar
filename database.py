@@ -80,6 +80,75 @@ def get_db():
         conn.close()
 
 
+SEED_JOBS = [
+    {
+        "title": "体检科医师 FY007",
+        "hospital": "东莞市妇幼保健院",
+        "city": "东莞",
+        "category": "体检科",
+        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY007",
+        "source": "官方公告",
+        "publish_date": "2026-02-01",
+        "deadline": "2026-11-30",
+        "has_bianzhi": False,
+        "reliability": "官方",
+        "description": "内科学硕士，副主任医师以上，50周岁以下。体检科通常为白班、无夜班。",
+    },
+    {
+        "title": "心电图医师 FY010",
+        "hospital": "东莞市妇幼保健院",
+        "city": "东莞",
+        "category": "心电图",
+        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY010",
+        "source": "官方公告",
+        "publish_date": "2026-02-01",
+        "deadline": "2026-11-30",
+        "has_bianzhi": False,
+        "reliability": "官方",
+        "description": "心血管内科学硕士，主治医师以上，40周岁以下。心电图室值班远少于临床内科。",
+    },
+    {
+        "title": "心血管内科医生 ZXY26104",
+        "hospital": "东莞市中西医结合医院",
+        "city": "东莞",
+        "category": "心电图",
+        "url": "https://dghb.dg.gov.cn/gkmlpt/content/4/4525/post_4525339.html#ZXY26104",
+        "source": "官方公告",
+        "publish_date": "2026-04-10",
+        "deadline": "2026-08-31",
+        "has_bianzhi": False,
+        "reliability": "官方",
+        "description": "心血管内科方向硕士，35周岁以下，需完成规培并取得执业医师资格证。",
+    },
+    {
+        "title": "心血管内科骨干医生 RY002",
+        "hospital": "南方医科大学第十附属医院（东莞市人民医院）",
+        "city": "东莞",
+        "category": "心电图",
+        "url": "https://dghb.dg.gov.cn/gkmlpt/content/4/4528/post_4528842.html#RY002",
+        "source": "官方公告",
+        "publish_date": "2026-04-17",
+        "deadline": "2026-08-31",
+        "has_bianzhi": False,
+        "reliability": "官方",
+        "description": "内科学博士，医师及以上职称，35周岁以下。三甲医院平台。",
+    },
+    {
+        "title": "内科医师 FY019",
+        "hospital": "东莞市妇幼保健院",
+        "city": "东莞",
+        "category": "社区医师",
+        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY019",
+        "source": "官方公告",
+        "publish_date": "2026-02-01",
+        "deadline": "2026-11-30",
+        "has_bianzhi": False,
+        "reliability": "官方",
+        "description": "内科学硕士，医师以上，35周岁以下，需完成住院医师规范化培训。",
+    },
+]
+
+
 def init_db():
     """初始化数据库（启动时调用）"""
     is_new = not os.path.exists(DB_PATH)
@@ -90,6 +159,39 @@ def init_db():
                 "INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)",
                 (k, v),
             )
+        # 首次创建数据库时，预置几条已知高质量岗位，避免页面空白
+        if is_new:
+            existing = conn.execute("SELECT COUNT(*) c FROM jobs").fetchone()["c"]
+            if existing == 0:
+                for job in SEED_JOBS:
+                    conn.execute(
+                        """
+                        INSERT INTO jobs(
+                          title, hospital, city, category, salary, description, url,
+                          source, publish_date, deadline, has_bianzhi, reliability,
+                          status, user_status, crawled_at, added_at, notes
+                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            job["title"].strip(),
+                            (job.get("hospital") or "").strip() or None,
+                            (job.get("city") or "").strip() or None,
+                            job.get("category", "其他").strip(),
+                            (job.get("salary") or "").strip() or None,
+                            (job.get("description") or "").strip() or None,
+                            job["url"].strip(),
+                            (job.get("source") or "").strip() or None,
+                            (job.get("publish_date") or "").strip() or None,
+                            (job.get("deadline") or "").strip() or None,
+                            1 if job.get("has_bianzhi") else 0,
+                            (job.get("reliability") or "待审").strip(),
+                            job.get("status") or "active",
+                            job.get("user_status") or "new",
+                            now_iso(),
+                            now_iso(),
+                            (job.get("notes") or "").strip() or None,
+                        ),
+                    )
     return is_new
 
 

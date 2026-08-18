@@ -104,17 +104,21 @@ NON_TARGET_REGION_KEYWORDS = [
     "茂名", "湛江", "云浮",
 ]
 
-# 可靠性判断关键词
-OFFICIAL_KEYWORDS = [
-    "人民医院", "中心医院", "附属医院",
-    "中医院", "妇幼保健", "卫健委", "疾控中心", "教育局",
-    "卫生健康局", "人社局", "事业单位",
-]  # 注意：detect_reliability() 不再用此列表做信源判定，仅保留作其他可能用途
+# 医院/卫健/教育类官方域名关键词
+OFFICIAL_DOMAIN_KEYWORDS = [
+    "hospital", "yy.", "rmyy", "zxyy", "zyy.", "fybj", "weijian",
+    "wsjkw", "health", "med.", "medcenter",
+]
 
+# 主流第三方医疗/综合招聘平台
 THIRD_PARTY_DOMAINS = [
-    "jobmd", "kq36", "fenbi", "51jOB", "yingjiesheng", "yingjishi",
-    "dxy", "zhongh", "zhonghr", "medical", "yisheng", "yixue",
+    # 医疗垂直
+    "jobmd", "kq36", "dxy", "dxycdn", "zhongh", "zhonghr",
+    "medical", "yisheng", "yixue", "gaoxiaojob", "ehafo",
+    # 综合招聘
+    "fenbi", "51job", "yingjiesheng", "yingjishi",
     "boss", "zhipin", "liepin", "lagou", "zhaopin", "51job",
+    "chinahr", "jiuyejie", "npoin",
 ]
 
 
@@ -184,16 +188,20 @@ def pick_city(text):
 def detect_reliability(url, title=""):
     """判断信息可靠性：官方 / 第三方 / 待审
 
-    收紧版：仅信任政府/教育域名和主流招聘平台。
-    不再因标题含"中心医院/卫健委"等关键词就标为官方——
-    因为 Tavily 召回片段太短，标题里出现关键词不等于页面就是岗位公告。
-    副作用：医院官网（xxx-hospital.com.cn）的招聘页会被判为"待审"
-            并被 Tavily 自动搜索过滤掉；这类岗位通常也会在 .gov.cn 同步发布。
+    策略：
+    - 政府/教育域名 (.gov.cn / .edu.cn) → 官方
+    - 医院官网、卫健/健康类域名 → 官方
+    - 主流招聘平台 → 第三方
+    - 其他（个人博客、资讯聚合、未识别域名）→ 待审
     """
     u = (url or "").lower()
     # 官方域名（政府/教育）
     if ".gov.cn" in u or ".edu.cn" in u:
         return "官方"
+    # 医院/卫健/健康类域名
+    for d in OFFICIAL_DOMAIN_KEYWORDS:
+        if d in u:
+            return "官方"
     # 第三方平台（招聘网站）
     for d in THIRD_PARTY_DOMAINS:
         if d in u:
