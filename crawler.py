@@ -214,12 +214,29 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
             if not items:
                 items = parser.parse_webpage_text(blob, {"source": "tavily"})
             if items:
-                # 把 city 强制设为查询对应的城市
+                # 不再强制 city=查询城市，而是让 parser 从真实内容里识别
+                filtered_items = []
                 for it in items:
-                    if not it.get("city"):
-                        it["city"] = city
                     it["source"] = f"tavily:{query}"
-                all_results.extend(items)
+                    # 用更完整的内容重新识别城市
+                    full_text = " ".join([
+                        it.get("title", ""),
+                        it.get("hospital", ""),
+                        it.get("description", ""),
+                        content,
+                        it.get("source", ""),
+                    ])
+                    # 严格过滤：文本必须明确指向东莞或广州
+                    if parser.has_wrong_region(full_text):
+                        continue
+                    chosen_city = parser.pick_city(full_text)
+                    if chosen_city:
+                        it["city"] = chosen_city
+                    # 若连目标城市都没出现，丢弃（避免全国聚合页）
+                    if not it.get("city"):
+                        continue
+                    filtered_items.append(it)
+                all_results.extend(filtered_items)
         summary_per_query.append({
             "query": query, "city": city,
             "count": len(results) if results else 0,
@@ -250,27 +267,22 @@ def search_tavily_for_jobs(queries=None, days=60, max_per_query=8):
                 continue
         if not it.get("url", "").startswith(("http://", "https://")):
             continue
-        # 城市白名单过滤：检测标题+内容里的城市，若出现非白名单城市则丢弃
-        # （Tavily 搜"东莞 心电图"也可能召回深圳/上海的招聘）
+        # 城市白名单过滤：用更完整文本做最终复核
         text_for_city = (
             it.get("title", "") + " " +
             it.get("hospital", "") + " " +
+            it.get("description", "") + " " +
             it.get("source", "")
         )
-        city_in_text = parser.detect_cities(text_for_city)
-        wrong_city = [c for c in city_in_text if c not in ALLOWED_CITIES]
-        if wrong_city:
+        # 必须明确指向东莞/广州，且不能是泛化聚合页
+        if parser.has_wrong_region(text_for_city):
             skipped_wrong_city += 1
             continue
-        # 第二道：省份/外省城市关键词过滤
-        # （有些 title 不含城市名但含省份，如"福建中医药大学附属第二人民医院"）
-        wrong_region = [
-            kw for kw in parser.NON_TARGET_REGION_KEYWORDS
-            if kw in text_for_city
-        ]
-        if wrong_region:
+        chosen_city = parser.pick_city(text_for_city)
+        if not chosen_city:
             skipped_wrong_city += 1
             continue
+        it["city"] = chosen_city
         valid_items.append(it)
 
     # 去重（数据库内部还会再按 URL 去重一次）

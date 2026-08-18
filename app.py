@@ -18,10 +18,45 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["JSON_AS_ASCII"] = False
 
 
+def cleanup_on_startup():
+    """
+    启动时清理：
+    1. 重新识别所有 active 岗位的城市；
+    2. 把明确非东莞/广州或地点不明的岗位标为 expired；
+    3. 校正剩余岗位的城市字段。
+    """
+    try:
+        database.init_db()
+        jobs = database.list_jobs(filters={"status": "active"})
+        for j in jobs:
+            text = " ".join([
+                j.get("title", ""),
+                j.get("hospital", ""),
+                j.get("description", ""),
+                j.get("source", ""),
+            ])
+            if parser.has_wrong_region(text):
+                database.update_job(j["id"], {"status": "expired"})
+                continue
+            chosen = parser.pick_city(text)
+            if not chosen:
+                database.update_job(j["id"], {"status": "expired"})
+                continue
+            if j.get("city") != chosen:
+                database.update_job(j["id"], {"city": chosen})
+    except Exception:
+        # 启动清理失败不应阻断服务
+        pass
+
+
 @app.before_request
 def ensure_db():
     if not os.path.exists(database.DB_PATH):
         database.init_db()
+
+
+# 应用启动时立即执行一次清理（对 gunicorn worker 也生效）
+cleanup_on_startup()
 
 
 # ============== 页面 ==============
