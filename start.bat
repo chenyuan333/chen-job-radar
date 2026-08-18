@@ -1,13 +1,13 @@
 @echo off
 REM ============================================
-REM   🍊 陈医生岗位雷达 - 一键启动脚本
+REM   🍊 医疗岗位雷达 - 一键启动脚本
 REM ============================================
 REM   双击本文件即可启动服务，浏览器会自动打开
 REM   如需停止：双击 stop.bat
 REM ============================================
 
 chcp 65001 >nul
-title 岗位雷达 - 启动中
+title 医疗岗位雷达 - 启动中
 
 set "APP_DIR=D:\workbuddy\2026-08-03-10-33-38\岗位雷达小程序"
 set "PORT=5173"
@@ -43,7 +43,7 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT%" ^| findstr "LISTENI
 REM 启动服务（端口 5173，监听所有网卡方便手机访问同 wifi 时打开）
 echo 正在启动服务...
 set "HOST=0.0.0.0"
-start "岗位雷达" /min python app.py
+start "医疗岗位雷达" /min python app.py
 
 REM 等待服务起来
 :wait_loop
@@ -60,7 +60,7 @@ for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
 
 echo.
 echo  ╔════════════════════════════════════════════════╗
-echo  ║   🍊 陈医生岗位雷达 - 已启动                  ║
+echo  ║   🍊 医疗岗位雷达 - 已启动                    ║
 echo  ╠════════════════════════════════════════════════╣
 echo  ║   本机：http://127.0.0.1:%PORT%                  ║
 echo  ║   同wifi手机：http://%LAN_IP%:%PORT%  ║

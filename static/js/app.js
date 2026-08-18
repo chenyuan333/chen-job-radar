@@ -1,4 +1,4 @@
-// ===== 陈医生岗位雷达 - 前端交互 =====
+// ===== 医疗岗位雷达 - 前端交互 =====
 const API = {
   jobs: '/api/jobs',
   jobsAdd: '/api/jobs',

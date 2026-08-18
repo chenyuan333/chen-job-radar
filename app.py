@@ -186,7 +186,7 @@ def api_crawl_deadlinks():
 def api_health():
     return jsonify({
         "ok": True,
-        "service": "陈医生岗位雷达",
+        "service": "医疗岗位雷达",
         "version": "1.0",
         "tavily_configured": bool(os.environ.get("TAVILY_API_KEY")),
         "scheduler_enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
@@ -264,7 +264,7 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")
     print(f"""
 ╔════════════════════════════════════════════════════════╗
-║      🍊 陈医生岗位雷达小程序 - 启动成功                ║
+║      🍊 医疗岗位雷达 - 启动成功                      ║
 ╠════════════════════════════════════════════════════════╣
 ║  访问地址：http://{host}:{port:<39} ║
 ║  数据库：{database.DB_PATH:<40} ║
