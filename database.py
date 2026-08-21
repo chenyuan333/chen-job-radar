@@ -65,6 +65,16 @@ DEFAULT_SETTINGS = {
 # 岗位雷达仅服务陈医生关注的东莞、广州两地
 ALLOWED_CITIES = ["东莞", "广州"]
 
+# 搜索同义词组：用户输入其中任意一个词，自动扩展匹配整组相关词
+SEARCH_SYNONYM_GROUPS = [
+    ["健康管理", "健康体检", "健康管理中心", "健康管理科", "健康体检中心", "体检中心", "体检"],
+    ["心血管", "心内科", "心脏"],
+    ["心电图", "心电"],
+    ["社区", "社卫", "全科"],
+    ["校医", "学校医师", "校园医生"],
+    ["疾控", "疾病预防控制", "卫生监督"],
+]
+
 
 @contextmanager
 def get_db():
@@ -145,6 +155,33 @@ SEED_JOBS = [
         "has_bianzhi": False,
         "reliability": "官方",
         "description": "内科学硕士，医师以上，35周岁以下，需完成住院医师规范化培训。",
+    },
+    {
+        "title": "健康体检中心医师",
+        "hospital": "广东医科大学附属东莞松山湖中心医院",
+        "city": "东莞",
+        "category": "体检科",
+        "url": "https://www.jobmd.cn/work/1390912.htm",
+        "source": "丁香人才网",
+        "publish_date": "",
+        "deadline": "",
+        "has_bianzhi": False,
+        "reliability": "第三方",
+        "description": "本科及以上，内科学/外科学/临床医学。初级医师需完成规培，具有三甲医院临床专科工作经历和科教研能力优先。五险一金、工作餐、节日福利。",
+    },
+    {
+        "title": "健康管理中心医师（041）",
+        "hospital": "东莞市松山湖中心医院",
+        "city": "东莞",
+        "category": "体检科",
+        "url": "https://www.fenbi.com/page/positions/11/192796?department=%E4%B8%9C%E8%8E%9E%E5%B8%82%E6%9D%BE%E5%B1%B1%E6%B9%96%E4%B8%AD%E5%BF%83%E5%8C%BB%E9%99%A2&page=5",
+        "source": "粉笔教育职位表/东莞市公立医院2026年招聘",
+        "publish_date": "2026-03-13",
+        "deadline": "2026-03-31",
+        "has_bianzhi": True,
+        "reliability": "官方",
+        "status": "expired",
+        "description": "东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生岗位。岗位代码041，招录1人，硕士研究生及以上，公共卫生与预防医学/公共卫生。报名已结束。",
     },
 ]
 
@@ -273,6 +310,18 @@ def add_jobs_bulk(items):
     return {"inserted": inserted, "duplicate": duplicate, "invalid": invalid, "errors": errors[:5]}
 
 
+def expand_search_keywords(q):
+    """把搜索词扩展为同义词列表，支持模糊匹配"""
+    if not q:
+        return []
+    q = q.strip()
+    keywords = {q}
+    for group in SEARCH_SYNONYM_GROUPS:
+        if any(kw in q for kw in group):
+            keywords.update(group)
+    return list(keywords)
+
+
 def list_jobs(filters=None):
     """
     filters 可包含：
@@ -306,9 +355,13 @@ def list_jobs(filters=None):
     if filters.get("only_fresh"):
         where.append("DATE(added_at)=DATE('now','localtime')")
     if filters.get("q"):
-        where.append("(title LIKE ? OR hospital LIKE ?)")
-        kw = f"%{filters['q']}%"
-        params.extend([kw, kw])
+        expanded = expand_search_keywords(filters["q"])
+        or_clauses = []
+        for kw in expanded:
+            or_clauses.append("(title LIKE ? OR hospital LIKE ?)")
+            params.extend([f"%{kw}%", f"%{kw}%"])
+        if or_clauses:
+            where.append("(" + " OR ".join(or_clauses) + ")")
 
     sql = "SELECT * FROM jobs"
     if where:
