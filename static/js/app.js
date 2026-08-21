@@ -22,7 +22,7 @@ const state = {
     city: '',
     reliability: '',
     user_status: '',
-    hide_expired: false,
+    hide_expired: true,
     has_bianzhi: false,
     only_fresh: false,
   },
@@ -451,11 +451,11 @@ $('#f-fresh').addEventListener('change', e => {
 $('#btn-reset').addEventListener('click', () => {
   state.filters = {
     q: '', category: '', city: '', reliability: '',
-    user_status: '', hide_expired: false, has_bianzhi: false, only_fresh: false,
+    user_status: '', hide_expired: true, has_bianzhi: false, only_fresh: false,
   };
   $('#f-q').value = '';
   $('#f-city').value = '';
-  $('#f-hide-expired').checked = false;
+  $('#f-hide-expired').checked = true;
   $('#f-bianzhi').checked = false;
   $('#f-fresh').checked = false;
   $$('.chip-row').forEach(row => {

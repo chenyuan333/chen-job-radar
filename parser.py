@@ -26,6 +26,15 @@ CATEGORY_KEYWORDS = {
 # 目标城市（岗位雷达只服务这两个城市）
 TARGET_CITIES = ["东莞", "广州"]
 
+# 东莞区域/镇街关键词（松山湖、虎门、长安等），出现在文本中视为东莞
+DG_DISTRICT_KEYWORDS = [
+    "松山湖", "虎门", "长安", "寮步", "大朗", "常平", "塘厦", "凤岗",
+    "清溪", "石碣", "石龙", "茶山", "横沥", "东坑", "企石", "桥头",
+    "谢岗", "黄江", "樟木头", "大岭山", "沙田", "高埗", "中堂",
+    "麻涌", "望牛墩", "洪梅", "道滘", "南城", "东城", "莞城", "万江",
+    "厚街", "松山湖中心医院", "东华医院", "康华医院",
+]
+
 # 全国主要城市列表（用于识别文本中出现的任何城市）
 ALL_CHINA_CITIES = [
     # 广东
@@ -142,8 +151,11 @@ def detect_cities(text):
 
 
 def detect_target_cities(text):
-    """只识别目标城市（东莞/广州）"""
-    return [c for c in TARGET_CITIES if c in text]
+    """只识别目标城市（东莞/广州），含东莞镇街关键词也视为东莞"""
+    found = [c for c in TARGET_CITIES if c in text]
+    if not found and any(kw in text for kw in DG_DISTRICT_KEYWORDS):
+        found.append("东莞")
+    return found
 
 
 def has_wrong_region(text):
@@ -172,6 +184,7 @@ def pick_city(text):
     """
     从文本中挑选最可能的城市。只返回东莞或广州；
     若两者都出现，按在文本中首次出现的顺序返回。
+    含东莞镇街关键词也视为东莞。
     """
     if not text:
         return ""
@@ -182,6 +195,9 @@ def pick_city(text):
         if pos != -1 and (first_pos is None or pos < first_pos):
             first_pos = pos
             chosen = c
+    # 若未直接出现"东莞"但含东莞镇街关键词，也判为东莞
+    if not chosen and any(kw in text for kw in DG_DISTRICT_KEYWORDS):
+        chosen = "东莞"
     return chosen
 
 
