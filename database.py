@@ -183,7 +183,84 @@ SEED_JOBS = [
         "status": "expired",
         "description": "东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生岗位。岗位代码041，招录1人，硕士研究生及以上，公共卫生与预防医学/公共卫生。报名已结束。",
     },
+    {
+        "title": "事业单位招聘网上报名入口",
+        "hospital": "广州市人力资源和社会保障局网站",
+        "city": "广州",
+        "category": "卫健委",
+        "url": "https://rsj.gz.gov.cn/ywzt/rszdgg/sydwgkzp/sydwzpwsbm/",
+        "source": "官方公告",
+        "publish_date": "",
+        "deadline": "",
+        "has_bianzhi": True,
+        "reliability": "官方",
+        "description": "广州市事业单位招聘网上报名系统入口，可查询人社局系统事业单位招聘公告及岗位。",
+    },
+    {
+        "title": "人事信息",
+        "hospital": "广州市卫生健康委员会网站",
+        "city": "广州",
+        "category": "卫健委",
+        "url": "https://wjw.gz.gov.cn/xxgk/rsxx/mindex.html",
+        "source": "官方公告",
+        "publish_date": "",
+        "deadline": "",
+        "has_bianzhi": True,
+        "reliability": "官方",
+        "description": "广州市卫生健康委员会人事信息栏目，发布直属事业单位招聘、拟聘公示、资格复审等通知。",
+    },
+    {
+        "title": "2026年广州市卫生健康系统校园招聘“优才计划”公告",
+        "hospital": "广州市卫生健康委员会",
+        "city": "广州",
+        "category": "卫健委",
+        "url": "https://wjw.gz.gov.cn/xxgk/tzgg/content/post_10732895.html",
+        "source": "官方公告",
+        "publish_date": "2026-03-23",
+        "deadline": "2026-03-30",
+        "has_bianzhi": True,
+        "reliability": "官方",
+        "status": "expired",
+        "description": "广州市卫生健康系统校园招聘“优才计划”，面向2026年毕业生公开招聘编制内医疗卫生机构工作人员39名。报名已结束。",
+    },
 ]
+
+
+def _insert_seed_jobs(conn):
+    """把 SEED_JOBS 同步进数据库（按 URL 去重，保留现有记录）"""
+    for job in SEED_JOBS:
+        url = job["url"].strip()
+        existing = conn.execute("SELECT id FROM jobs WHERE url=?", (url,)).fetchone()
+        if existing:
+            continue
+        conn.execute(
+            """
+            INSERT INTO jobs(
+              title, hospital, city, category, salary, description, url,
+              source, publish_date, deadline, has_bianzhi, reliability,
+              status, user_status, crawled_at, added_at, notes
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                job["title"].strip(),
+                (job.get("hospital") or "").strip() or None,
+                (job.get("city") or "").strip() or None,
+                job.get("category", "其他").strip(),
+                (job.get("salary") or "").strip() or None,
+                (job.get("description") or "").strip() or None,
+                url,
+                (job.get("source") or "").strip() or None,
+                (job.get("publish_date") or "").strip() or None,
+                (job.get("deadline") or "").strip() or None,
+                1 if job.get("has_bianzhi") else 0,
+                (job.get("reliability") or "待审").strip(),
+                job.get("status") or "active",
+                job.get("user_status") or "new",
+                now_iso(),
+                now_iso(),
+                (job.get("notes") or "").strip() or None,
+            ),
+        )
 
 
 def init_db():
@@ -196,39 +273,8 @@ def init_db():
                 "INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)",
                 (k, v),
             )
-        # 首次创建数据库时，预置几条已知高质量岗位，避免页面空白
-        if is_new:
-            existing = conn.execute("SELECT COUNT(*) c FROM jobs").fetchone()["c"]
-            if existing == 0:
-                for job in SEED_JOBS:
-                    conn.execute(
-                        """
-                        INSERT INTO jobs(
-                          title, hospital, city, category, salary, description, url,
-                          source, publish_date, deadline, has_bianzhi, reliability,
-                          status, user_status, crawled_at, added_at, notes
-                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            job["title"].strip(),
-                            (job.get("hospital") or "").strip() or None,
-                            (job.get("city") or "").strip() or None,
-                            job.get("category", "其他").strip(),
-                            (job.get("salary") or "").strip() or None,
-                            (job.get("description") or "").strip() or None,
-                            job["url"].strip(),
-                            (job.get("source") or "").strip() or None,
-                            (job.get("publish_date") or "").strip() or None,
-                            (job.get("deadline") or "").strip() or None,
-                            1 if job.get("has_bianzhi") else 0,
-                            (job.get("reliability") or "待审").strip(),
-                            job.get("status") or "active",
-                            job.get("user_status") or "new",
-                            now_iso(),
-                            now_iso(),
-                            (job.get("notes") or "").strip() or None,
-                        ),
-                    )
+        # 每次启动都同步种子岗位（按 URL 去重），防止 Railway 等无持久化卷环境丢失数据
+        _insert_seed_jobs(conn)
     return is_new
 
 
