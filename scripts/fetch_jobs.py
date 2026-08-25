@@ -8,7 +8,11 @@ import os
 import sys
 import time
 import requests
+import urllib3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 引入仓库根目录的 parser.py
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -116,47 +120,69 @@ SEED_JOBS = [
         "reliability": "官方",
         "description": "内科学硕士，医师以上，35周岁以下，需完成住院医师规范化培训。",
     },
-    {
-        "title": "健康体检中心医师",
-        "hospital": "广东医科大学附属东莞松山湖中心医院",
-        "city": "东莞",
-        "category": "体检科",
-        "url": "https://www.jobmd.cn/work/1390912.htm",
-        "source": "丁香人才网",
-        "publish_date": "",
-        "deadline": "",
-        "has_bianzhi": False,
-        "reliability": "第三方",
-        "description": "本科及以上，内科学/外科学/临床医学。初级医师需完成规培，具有三甲医院临床专科工作经历和科教研能力优先。",
-    },
-    {
-        "title": "健康管理中心医师（041）",
-        "hospital": "东莞市松山湖中心医院",
-        "city": "东莞",
-        "category": "体检科",
-        "url": "https://www.fenbi.com/page/positions/11/192796?department=东莞市松山湖中心医院&page=5",
-        "source": "粉笔教育职位表/东莞市公立医院2026年招聘",
-        "publish_date": "2026-03-13",
-        "deadline": "2026-03-31",
-        "has_bianzhi": True,
-        "reliability": "官方",
-        "status": "expired",
-        "description": "东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生岗位。岗位代码041，招录1人，硕士研究生及以上，公共卫生与预防医学/公共卫生。报名已结束。",
-    },
-    {
-        "title": "广州事业单位医疗卫生岗",
-        "hospital": "广州市人力资源和社会保障局",
-        "city": "广州",
-        "category": "卫健委",
-        "url": "https://rsj.gz.gov.cn/ywzt/rcgz/rsxw/",
-        "source": "官方公告",
-        "publish_date": "2026-01-01",
-        "deadline": "",
-        "has_bianzhi": False,
-        "reliability": "官方",
-        "description": "广州市事业单位统一公开招聘，含市卫健委、疾控中心、医院等医疗卫生类岗位。关注官网最新公告。",
-    },
 ]
+
+# ── 链接体检 ─────────────────────────────────────────────
+# 返回 "ok"（可访问）/ "dead"（确认失效：404/410 或内容报错）/ "unknown"（网络波动、反爬 403 等，不判死刑）
+_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+)
+_DEAD_CONTENT_KWS = [
+    "页面不存在", "内容不存在", "网页无法访问", "链接已失效", "文件未找到",
+    "职位已关闭", "已停止招聘", "招聘已结束", "公告不存在",
+]
+
+# 人工确认已下线/失效的 URL（页面仍返回 200 但岗位实际已关闭，由用户反馈确认）
+MANUAL_DEAD_URLS = {
+    # 松山湖中心医院健康体检中心医师，丁香人才网页面仍在但岗位已下线（2026-08-25 用户确认）
+    "https://www.jobmd.cn/work/1390912.htm",
+}
+
+
+def check_url_alive(url):
+    """检测链接是否存活。仅 404/410 或明确的失效文案才判 dead。"""
+    if not url or not str(url).startswith("http"):
+        return "dead"
+    base_url = str(url).split("#")[0]
+    if base_url in MANUAL_DEAD_URLS:
+        return "dead"
+    try:
+        r = requests.get(
+            url,
+            headers={"User-Agent": _UA, "Accept-Language": "zh-CN,zh;q=0.9"},
+            timeout=15,
+            verify=False,
+            allow_redirects=True,
+        )
+        if r.status_code in (404, 410):
+            return "dead"
+        if r.status_code >= 400:
+            return "unknown"  # 403/5xx 可能是反爬，不判死
+        text = (r.text or "")[:80000]
+        for kw in _DEAD_CONTENT_KWS:
+            if kw in text:
+                return "dead"
+        return "ok"
+    except requests.exceptions.SSLError:
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _drop_dead_jobs(jobs, label="existing"):
+    """并发体检，剔除确认失效(dead)的岗位。unknown 的保留待下次复检。"""
+    if not jobs:
+        return jobs
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        alive_flags = list(ex.map(lambda j: check_url_alive(j.get("url", "")), jobs))
+    kept = []
+    for j, flag in zip(jobs, alive_flags):
+        if flag == "dead":
+            print(f"[link-check] 剔除失效链接({label}): {j.get('title', '')[:30]} -> {j.get('url', '')[:70]}")
+        else:
+            kept.append(j)
+    return kept
 
 
 def _tavily_search_one(query, api_key, max_results=8, days=60):
@@ -250,26 +276,38 @@ def _is_job_match_category(item):
     return cat in allowed
 
 
-def _sweep_expired(jobs):
-    """把 deadline 已过今天的标为 expired。"""
+def _drop_expired(jobs):
+    """直接剔除截止日期已过的岗位（不再保留 expired 状态，避免推荐已下线岗位）。"""
     today = datetime.now().date()
+    kept = []
     for j in jobs:
         ddl = j.get("deadline")
         if ddl:
             try:
-                d = datetime.strptime(ddl, "%Y-%m-%d").date()
+                d = datetime.strptime(str(ddl)[:10], "%Y-%m-%d").date()
                 if d < today:
-                    j["status"] = "expired"
-                else:
-                    if j.get("status") == "expired":
-                        j["status"] = "active"
+                    print(f"[expired] 剔除已截止: {j.get('title', '')[:30]} (deadline={ddl})")
+                    continue
             except Exception:
                 pass
-        else:
-            # 没截止日期的，若已显式过期则保留，否则 active
-            if j.get("status") != "expired":
-                j["status"] = "active"
-    return jobs
+        j["status"] = "active"
+        kept.append(j)
+    return kept
+
+
+def _drop_wrong_city(jobs):
+    """剔除城市不在 广州/东莞 范围内的岗位（含标题中出现外地城市但 city 字段误标的情况）。"""
+    other_cities = ["北京", "上海", "深圳", "武汉", "长沙", "成都", "重庆", "杭州",
+                    "南京", "西安", "郑州", "福州", "昆明", "贵阳", "南昌", "合肥",
+                    "天津", "苏州", "青岛", "济南", "厦门", "佛山", "惠州", "珠海"]
+    kept = []
+    for j in jobs:
+        title = j.get("title", "") or ""
+        if j.get("city") not in ALLOWED_CITIES or any(c in title for c in other_cities):
+            print(f"[city] 剔除外地岗位: {title[:30]} (city={j.get('city')})")
+            continue
+        kept.append(j)
+    return kept
 
 
 def fetch_jobs(api_key=None, queries=None, days=60, max_per_query=8):
@@ -302,16 +340,11 @@ def fetch_jobs(api_key=None, queries=None, days=60, max_per_query=8):
                 continue
             if not _is_job_match_category(item):
                 continue
-            # 过期过滤
-            if item.get("deadline"):
-                try:
-                    d = datetime.strptime(item["deadline"], "%Y-%m-%d").date()
-                    if d < datetime.now().date():
-                        item["status"] = "expired"
-                except Exception:
-                    pass
-            if item.get("status") != "expired":
-                item["status"] = "active"
+            # 新岗位入库前先体检链接，死链直接丢弃
+            if check_url_alive(item.get("url", "")) == "dead":
+                print(f"[link-check] 新抓取结果链接失效，丢弃: {item.get('title', '')[:30]} -> {item.get('url', '')[:70]}")
+                continue
+            item["status"] = "active"
             all_items.append(item)
         time.sleep(0.3)
 
@@ -370,14 +403,16 @@ def build_jobs_data(tavily_items=None):
                 final_map[j["url"]] = j
 
     jobs = list(final_map.values())
-    jobs = _sweep_expired(jobs)
+    # 三重清理：外地剔除 -> 已截止剔除 -> 死链剔除（每日复检旧岗位）
+    jobs = _drop_wrong_city(jobs)
+    jobs = _drop_expired(jobs)
+    jobs = _drop_dead_jobs(jobs, label="daily")
 
-    # 排序：active 在前，编内优先，有发布日期按新到旧
+    # 排序：编内优先，有发布日期按新到旧
     def sort_key(j):
-        is_active = 1 if j.get("status") == "active" else 0
         is_bianzhi = 1 if j.get("has_bianzhi") else 0
         pub = j.get("publish_date") or "1970-01-01"
-        return (is_active, is_bianzhi, pub)
+        return (is_bianzhi, pub)
 
     jobs.sort(key=sort_key, reverse=True)
 
