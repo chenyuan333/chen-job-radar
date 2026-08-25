@@ -393,6 +393,40 @@ html, body {
   font-weight: 600;
 }
 
+.modal-link.disabled {
+  background: var(--border);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.modal-url-wrap {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.modal-url-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.modal-url {
+  display: block;
+  font-size: 12px;
+  color: var(--primary);
+  word-break: break-all;
+  line-height: 1.5;
+  text-decoration: underline;
+}
+
+.action-btn.link-btn {
+  background: #EFF6FF;
+  color: var(--primary);
+  border-color: #BFDBFE;
+}
+
 /* 离线提示 */
 .offline-tip {
   position: fixed;

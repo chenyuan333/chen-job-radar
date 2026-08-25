@@ -136,6 +136,7 @@ function render() {
         <div class="actions">
           <button class="action-btn ${isFav(j.url) ? 'active' : ''}" onclick="toggleFav(event, '${escapeHtml(j.url)}')">⭐ 收藏</button>
           <button class="action-btn ${isApplied(j.url) ? 'active' : ''}" onclick="toggleApplied(event, '${escapeHtml(j.url)}')">✅ 已投</button>
+          <button class="action-btn link-btn" onclick="openLink(event, '${escapeHtml(j.url)}')">🔗 原文</button>
         </div>
       </div>
     `;
@@ -161,9 +162,35 @@ function openDetail(url) {
     <div>截止：${j.deadline || '未知'}</div>
     <div>来源：${escapeHtml(j.source || '')}</div>
   `;
-  $('#modalDesc').textContent = j.description || '暂无岗位描述';
-  $('#modalLink').href = j.url;
+  // 描述：为空时给出引导，让用户去看原文
+  $('#modalDesc').textContent = j.description
+    || '此岗位暂无简介，点下方「查看原文 & 投递」按钮，查看具体要求和报名方式。';
+  // 链接：显示完整 URL + 大按钮
+  const wrap = $('#modalUrlWrap');
+  const urlEl = $('#modalUrl');
+  const linkBtn = $('#modalLink');
+  if (j.url) {
+    wrap.style.display = 'block';
+    urlEl.href = j.url;
+    urlEl.textContent = j.url;
+    linkBtn.href = j.url;
+    linkBtn.classList.remove('disabled');
+    linkBtn.textContent = '🔗 查看原文 & 投递';
+  } else {
+    wrap.style.display = 'none';
+    urlEl.removeAttribute('href');
+    urlEl.textContent = '';
+    linkBtn.removeAttribute('href');
+    linkBtn.classList.add('disabled');
+    linkBtn.textContent = '暂无直达链接';
+  }
   $('#modal').classList.add('show');
+}
+
+// 卡片上的「原文」按钮：直接跳转招聘页面（不打开弹窗）
+function openLink(e, url) {
+  e.stopPropagation();
+  if (url) window.open(url, '_blank', 'noopener');
 }
 
 function closeDetail() {
@@ -268,6 +295,7 @@ window.openDetail = openDetail;
 window.closeDetail = closeDetail;
 window.toggleFav = toggleFav;
 window.toggleApplied = toggleApplied;
+window.openLink = openLink;
 
 bindEvents();
 loadJobs();

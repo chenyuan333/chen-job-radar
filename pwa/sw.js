@@ -1,5 +1,5 @@
 /* 医疗岗位雷达 - Service Worker（离线缓存） */
-const CACHE_NAME = 'jobradar-v1';
+const CACHE_NAME = 'jobradar-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',

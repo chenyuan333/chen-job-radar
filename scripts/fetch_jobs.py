@@ -203,6 +203,10 @@ def _parse_tavily_result(res, query):
     item = items[0]
     item["source"] = f"tavily:{query}"
 
+    # 描述兜底：Tavily 摘要有内容但 parser 没解析出 description 时，用摘要截断
+    if not item.get("description") and content:
+        item["description"] = content.strip()[:500]
+
     # 城市识别（排除 source/query 污染）
     full_text = " ".join([it or "" for it in [
         item.get("title", ""),
