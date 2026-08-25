@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#3B82F6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="岗位雷达" />
+  <title>医疗岗位雷达</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>
+        <img src="icon-192.png" class="logo" alt="" />
+        医疗岗位雷达
+      </h1>
+      <div class="sub">
+        <span id="updated">加载中…</span>
+        <button id="refreshBtn" class="refresh">↻ 刷新</button>
+      </div>
+    </header>
+
+    <div class="search-box">
+      <input id="searchInput" type="search" placeholder="搜索医院 / 岗位 / 关键词" />
+    </div>
+
+    <section class="filters">
+      <div class="filter-row" id="cityChips">
+        <span class="chip active" data-city="">全部</span>
+        <span class="chip" data-city="东莞">东莞</span>
+        <span class="chip" data-city="广州">广州</span>
+      </div>
+      <div class="filter-row" id="categoryChips"></div>
+      <div class="toggles">
+        <label class="toggle">
+          <input type="checkbox" id="bianzhiToggle" />
+          只看编内
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="expiredToggle" checked />
+          隐藏已过期
+        </label>
+      </div>
+    </section>
+
+    <div class="stats-bar">
+      <span id="count">共 0 条</span>
+      <span>东莞+广州医疗岗</span>
+    </div>
+
+    <main id="list" class="job-list"></main>
+
+    <!-- 详情弹窗 -->
+    <div id="modal" class="modal" onclick="if(event.target===this) closeDetail()">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2 id="modalTitle"></h2>
+          <button class="close-btn" onclick="closeDetail()">×</button>
+        </div>
+        <div class="modal-meta" id="modalMeta"></div>
+        <div class="modal-desc" id="modalDesc"></div>
+        <a id="modalLink" class="modal-link" target="_blank" rel="noopener">查看原文</a>
+      </div>
+    </div>
+
+    <div id="offlineTip" class="offline-tip">当前离线，显示缓存数据</div>
+
+    <nav class="bottom-nav">
+      <div class="nav-item active" data-tab="all">
+        <span class="icon">📋</span>
+        全部
+      </div>
+      <div class="nav-item" data-tab="favorite">
+        <span class="icon">⭐</span>
+        收藏
+      </div>
+      <div class="nav-item" data-tab="applied">
+        <span class="icon">✅</span>
+        已投
+      </div>
+    </nav>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
