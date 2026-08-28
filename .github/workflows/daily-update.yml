@@ -2,15 +2,27 @@ name: 每日岗位更新
 
 on:
   schedule:
-    # UTC 00:00 = 北京时间 08:00
+    # UTC 00:00 = 北京时间 08:00（主更新）
     - cron: '0 0 * * *'
+    # UTC 05:00 = 北京时间 13:00（补跑：若早上 cron 被 GitHub 漏调度，此处兜底；
+    # 若早上已更新过则跳过抓取，仅重新部署，不浪费 Tavily 配额）
+    - cron: '0 5 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  update:
+  update-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,10 +36,15 @@ jobs:
       - name: Install deps
         run: pip install requests beautifulsoup4
 
-      - name: Fetch jobs
+      - name: Fetch jobs (skip if already updated today)
         env:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-        run: python scripts/fetch_jobs.py
+        run: |
+          if grep -q "\"updated_at\": \"$(date +%F)" pwa/jobs.json; then
+            echo "今日已完成抓取，跳过（仅重新部署）"
+          else
+            python scripts/fetch_jobs.py
+          fi
 
       - name: Commit & push
         run: |
@@ -35,3 +52,17 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add pwa/jobs.json
           git diff --cached --quiet || (git commit -m "chore: 每日岗位更新 $(date +%F)" && git push)
+
+      # 关键：GITHUB_TOKEN 的 push 不会触发其他 workflow（GitHub 防递归规则），
+      # 所以部署必须在本 workflow 内完成，不能依赖 pages.yml 的 push 触发。
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload PWA artifacts
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pwa
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
