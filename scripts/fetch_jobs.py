@@ -5,6 +5,7 @@
 """
 import json
 import os
+import re
 import sys
 import time
 import requests
@@ -64,9 +65,11 @@ AGG_URL_PATTERNS = [
     "gaoxiaojob.com/hotword/",       # 高校人才网"XX招聘汇总"页（全国）
     "gaoxiaojob.com/rczhaopin/",     # 高校人才网人才招聘频道页
     "gaoxiaojob.com/company/",       # 高校人才网机构主页/招聘专区（岗位聚合）
+    "gaoxiaojob.com/column/",        # 高校人才网"XX专区"栏目聚合页（全国双一流/本科高校专区等）
     "gaoxiaojob.com/zhaopin/",       # 高校人才网招聘频道页
     "liepin.com/zp",                 # 猎聘聚合页（/zp拼音 串）；具体职位页是 /job/ 开头
     "jobmd.cn/zhaopin/",             # 丁香人才频道页（具体职位是 /work/）
+    "zhaopin.com/sou/",              # 智联招聘搜索/聚合页（/sou/ 开头是搜索结果列表）
     "yzp.cn/zhaopingonggao",         # 医招网公告列表页
     "med66.com",                     # 医学教育网全国卫生事业编汇总
     "wjw.gz.gov.cn/xxgk/",           # 卫健委人事信息栏目页（列表非具体公告）
@@ -157,6 +160,12 @@ MANUAL_DEAD_URLS = {
     "https://www.by.gov.cn/zwgk/zdlyxxgkzl/jycyxxgkzl/zpxx/qnzpxx/content/post_10902933.html",
     # 广东省订单定向培养医学大学生项目通知——高考招生项目非社会招聘，且发布在云安政府网（2026-09-06 核查确认）
     "https://www.yunan.gov.cn/yfyawsj/gkmlpt/content/2/2016/post_2016174.html",
+    # 东莞市卫生健康局官网首页畸形URL（末尾带冒号），请求404（2026-09-09 用户反馈打不开 + 实测404）
+    "http://dghb.dg.gov.cn/:",
+    # 2026年广州市南沙区卫健局公开招聘下属事业单位工作人员公告，报名期2026-08-18至08-24已截止（2026-09-09 核查正文确认）
+    "http://www.gzns.gov.cn/zwgk/tzgg/content/post_10962793.html",
+    # 东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生公告（百万英才汇南粤批次），3月报名已截止（2026-09-09 核查确认）
+    "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4511514.html",
 }
 
 
@@ -282,6 +291,16 @@ def _parse_tavily_result(res, query):
     if ddl:
         item["deadline"] = ddl
 
+    # 报名窗口兜底：公告正文常写"报名时间为 X月X日至 X月X日"，
+    # Tavily 摘要带报名截止但 parser 未识别时，手动提取作为 deadline
+    if not item.get("deadline") and content:
+        m = re.search(r"报名(?:时间|期)?[为是]?[^。]{0,90}?[至到—\-]\s*(?:20\d{2}年?)?(\d{1,2})月(\d{1,2})日", content)
+        if m:
+            month, day = int(m.group(1)), int(m.group(2))
+            if datetime.now().year == 2026 and 1 <= month <= 12 and 1 <= day <= 31:
+                item["deadline"] = f"2026-{month:02d}-{day:02d}"
+                print(f"[deadline] 报名窗口提取: {item.get('title','')[:24]} -> {item['deadline']}")
+
     # 分类
     item["category"] = parser.categorize(title + " " + content[:500])
 
@@ -339,7 +358,8 @@ def _drop_wrong_city(jobs):
 
 def _is_agg_job(j):
     """判断是否为聚合页/频道页/泛标题页/非招聘内容（点进去是全国岗位列表，非东莞广州具体岗位）。"""
-    url = (j.get("url") or "").lower().split("#")[0]
+    # 归一化 URL：去 fragment、去尾部杂字符（Tavily 偶发在 URL 尾带 ':'）
+    url = (j.get("url") or "").lower().split("#")[0].strip().rstrip(":, ")
     title = (j.get("title") or "").strip()
     if any(p in url for p in AGG_URL_PATTERNS):
         return "聚合页URL"
