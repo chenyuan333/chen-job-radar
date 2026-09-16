@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-15T00:20:39",
+  "updated_at": "2026-09-16T00:18:21",
   "total": 11,
   "jobs": [
     {
@@ -87,20 +87,6 @@
       "status": "active"
     },
     {
-      "title": "东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生 ...",
-      "hospital": "",
-      "url": "http://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4511514.html",
-      "category": "卫健委",
-      "city": "东莞",
-      "reliability": "官方",
-      "has_bianzhi": false,
-      "publish_date": null,
-      "deadline": null,
-      "source": "tavily:东莞市卫生健康局 招聘公告 2026",
-      "description": "一、招聘岗位. 东莞市卫生健康局下属18家公立医院，计划面向社会公开招聘医学类高校优秀应届毕业生142人，应聘人员可通过东莞市人力资源和社会保障局网站（http://dghrss.",
-      "status": "active"
-    },
-    {
       "title": "东莞市公立医院2025年集中公开招聘422名高层次和急需紧缺人才公告职位列表",
       "hospital": "高校人才网",
       "url": "https://www.gaoxiaojob.com/announcement/job-list?id=348769",
@@ -154,6 +140,20 @@
       "deadline": null,
       "source": "tavily:东莞市卫生健康局 招聘公告 2026",
       "description": "June 18, 2026 - 东莞市卫生健康局关于东莞市十七届人大六次会议第20260085号建议答复的函.pdf",
+      "status": "active"
+    },
+    {
+      "title": "粉笔教育广东分校官网",
+      "hospital": "东坑镇第三小学2026年招聘校医助理公告",
+      "url": "https://fenbi.com/page/fenxiaozhaokaodetail/2/344/466416595652608",
+      "category": "校医",
+      "city": "东莞",
+      "reliability": "第三方",
+      "has_bianzhi": false,
+      "publish_date": null,
+      "deadline": null,
+      "source": "tavily:东莞市教育局 校医 招聘 2026",
+      "description": "May 20, 2026 - 东莞市东坑镇第三小学（...镇——东莞市东坑镇。学校总用地面积19500平方米，总建筑面积49100平方米，办学规模为36个教学班，提供1620个优质公办学位。 ... 4.能做好学校卫生保健、防疫及学校其他应急工作，有处理小学生突发疾病和意外事故的技术和能力。 · 5.身心健康，遵纪守法，热爱校医工作，热",
       "status": "active"
     }
   ]
