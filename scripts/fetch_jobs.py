@@ -67,23 +67,38 @@ AGG_URL_PATTERNS = [
     "gaoxiaojob.com/company/",       # 高校人才网机构主页/招聘专区（岗位聚合）
     "gaoxiaojob.com/column/",        # 高校人才网"XX专区"栏目聚合页（全国双一流/本科高校专区等）
     "gaoxiaojob.com/zhaopin/",       # 高校人才网招聘频道页
+    "gaoxiaojob.com/announcement/job-list",  # 高校人才网职位列表聚合页（一次列多单位岗位）
+    "fenbi.com/page/positions",      # 粉笔岗位/职位表列表页（聚合多个单位岗位）
+    "fenbi.com/page/fenxiaozhaokao",  # 粉笔分校招考页
     "liepin.com/zp",                 # 猎聘聚合页（/zp拼音 串）；具体职位页是 /job/ 开头
     "jobmd.cn/zhaopin/",             # 丁香人才频道页（具体职位是 /work/）
     "zhaopin.com/sou/",              # 智联招聘搜索/聚合页（/sou/ 开头是搜索结果列表）
+    "kq36.com",                      # 康强医疗人才网（聚合页，所辖岗位多为历史批次，页面常标"已结束"）
+    "jrzp.com",                      # 今日招聘网（转载聚合站，时效不可信）
+    "wondercv.com",                  # 简历网站的职业科普/求职指南文章，非招聘
     "yzp.cn/zhaopingonggao",         # 医招网公告列表页
     "med66.com",                     # 医学教育网全国卫生事业编汇总
     "wjw.gz.gov.cn/xxgk/",           # 卫健委人事信息栏目页（列表非具体公告）
     "/gkmlpt/index",                 # 信息公开平台首页/栏目页
 ]
+# 第三方人才网域名：条目无任何日期（发布/截止）时无法验证时效，一律不收
+THIRDPARTY_HOSTS = (
+    "gaoxiaojob.com", "fenbi.com", "liepin.com", "jobmd.cn", "zhaopin.com",
+    "kq36.com", "jrzp.com", "yzp.cn", "med66.com", "51job.com", "wondercv.com",
+)
 AGG_TITLE_PATTERNS = [
     "招聘信息汇总", "招聘信息】", "招聘网_", "_最新", "招聘公告_", "汇总",
-    "工作职位/岗位", "人才招聘引进专区",
+    "工作职位/岗位", "人才招聘引进专区", "职位列表", "招聘岗位表", "专区",
 ]
 # 泛化标题（抓不到具体岗位名，点进去多为栏目页/结果页）
-GENERIC_TITLES = {"公告公示", "人事信息", "通知公告", "招聘信息", "公示", "就业机会"}
+GENERIC_TITLES = {"公告公示", "人事信息", "通知公告", "招聘信息", "公示", "就业机会", "校医", "医师", "医生"}
 
-# 标题含这些词的不是社会招聘岗位（定向培养是高考招生项目等）
-NON_JOB_TITLE_KWS = ["订单定向培养", "定向培养医学", "招生计划"]
+# 标题含这些词的不是社会招聘岗位（定向培养是高考招生项目、答复函是政务文件、求职指南是文章等）
+NON_JOB_TITLE_KWS = [
+    "订单定向培养", "定向培养医学", "招生计划",
+    "答复的函", "建议答复", "答复函", "人大建议", "政协提案", "信访",
+    "求职指南", "如何判断", "如何选择", "面试技巧", "简历模板", "职业规划",
+]
 
 # 结果公示类关键词（招聘已结束，页面是拟聘用/成绩公示，不是在招岗位）
 # 注意：不要用"体检考察"这类词——正常招聘公告的流程描述里也有"体检、考察"
@@ -146,26 +161,49 @@ _DEAD_CONTENT_KWS = [
     "职位已关闭", "已停止招聘", "招聘已结束", "公告不存在",
 ]
 
-# 人工确认已下线/失效/过期的 URL（页面仍返回 200 但岗位实际不可投，由用户反馈或人工核查确认）
+def _norm_url(u):
+    """URL 规范化：去协议/www/fragment/query/尾斜杠与尾部杂字符。
+
+    用于黑名单比对与去重——同一页面 http/https、带不带 www 必须视为同一条，
+    否则会像 2026-09 那样出现「拉黑后换协议又复活」的问题。
+    """
+    u = (u or "").strip().lower()
+    u = u.split("#")[0].split("?")[0]
+    u = re.sub(r"^https?://", "", u)
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/").rstrip(":, ")
+
+
+# 人工确认已下线/失效/过期的 URL（规范化后比对，忽略 http/https、www、尾斜杠差异）
 MANUAL_DEAD_URLS = {
-    # 松山湖中心医院健康体检中心医师，丁香人才网页面仍在但岗位已下线（2026-08-25 用户确认）
-    "https://www.jobmd.cn/work/1390912.htm",
-    # 东莞市社区卫生服务中心"百万英才汇南粤"集中招聘，报名时间2026-03-16至03-20，早已截止（2026-09-06 核查确认）
-    "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4508073.html",
-    # 从化区卫健局所属事业单位招聘——拟聘用人员公示（招聘已结束，2026-09-06 核查确认）
-    "http://www.conghua.gov.cn/zwgk/gggs/content/post_10988167.html",
-    # 东莞市卫健局集中招聘高校毕业生——入围体检人员名单公告（招聘已结束，2026-09-06 核查确认）
-    "https://dghb.dg.gov.cn/gkmlpt/content/4/4530/post_4530964.html",
-    # 广州市白云区卫健系统2026年第一批公开招聘，2026-07-15发布，报名早已截止（2026-09-06 核查确认）
-    "https://www.by.gov.cn/zwgk/zdlyxxgkzl/jycyxxgkzl/zpxx/qnzpxx/content/post_10902933.html",
-    # 广东省订单定向培养医学大学生项目通知——高考招生项目非社会招聘，且发布在云安政府网（2026-09-06 核查确认）
-    "https://www.yunan.gov.cn/yfyawsj/gkmlpt/content/2/2016/post_2016174.html",
-    # 东莞市卫生健康局官网首页畸形URL（末尾带冒号），请求404（2026-09-09 用户反馈打不开 + 实测404）
-    "http://dghb.dg.gov.cn/:",
-    # 2026年广州市南沙区卫健局公开招聘下属事业单位工作人员公告，报名期2026-08-18至08-24已截止（2026-09-09 核查正文确认）
-    "http://www.gzns.gov.cn/zwgk/tzgg/content/post_10962793.html",
-    # 东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生公告（百万英才汇南粤批次），3月报名已截止（2026-09-09 核查确认）
-    "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4511514.html",
+    _norm_url(u) for u in [
+        # 松山湖中心医院健康体检中心医师，丁香人才网页面仍在但岗位已下线（2026-08-25 用户确认）
+        "https://www.jobmd.cn/work/1390912.htm",
+        # 东莞市社区卫生服务中心"百万英才汇南粤"集中招聘，报名时间2026-03-16至03-20，早已截止（2026-09-06 核查确认）
+        "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4508073.html",
+        # 从化区卫健局所属事业单位招聘——拟聘用人员公示（招聘已结束，2026-09-06 核查确认）
+        "http://www.conghua.gov.cn/zwgk/gggs/content/post_10988167.html",
+        # 东莞市卫健局集中招聘高校毕业生——入围体检人员名单公告（招聘已结束，2026-09-06 核查确认）
+        "https://dghb.dg.gov.cn/gkmlpt/content/4/4530/post_4530964.html",
+        # 广州市白云区卫健系统2026年第一批公开招聘，2026-07-15发布，报名早已截止（2026-09-06 核查确认）
+        "https://www.by.gov.cn/zwgk/zdlyxxgkzl/jycyxxgkzl/zpxx/qnzpxx/content/post_10902933.html",
+        # 广东省订单定向培养医学大学生项目通知——高考招生项目非社会招聘，且发布在云安政府网（2026-09-06 核查确认）
+        "https://www.yunan.gov.cn/yfyawsj/gkmlpt/content/2/2016/post_2016174.html",
+        # 东莞市卫生健康局官网首页畸形URL（末尾带冒号），请求404（2026-09-09 用户反馈打不开 + 实测404）
+        "http://dghb.dg.gov.cn/:",
+        # 2026年广州市南沙区卫健局公开招聘下属事业单位工作人员公告，报名期2026-08-18至08-24已截止（2026-09-09 核查正文确认）
+        "http://www.gzns.gov.cn/zwgk/tzgg/content/post_10962793.html",
+        # 东莞市公立医院2026年公开招聘医学类高校优秀应届毕业生公告（百万英才汇南粤批次），3月报名已截止（2026-09-09 核查确认）
+        "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/content/post_4511514.html",
+        # 2026年广州市南沙区卫健局急需专业人才引进，报名期2026-09-01至09-20已截止（2026-09-21 核查正文确认）
+        "http://www.gzns.gov.cn/zwgk/tzgg/content/post_10980178.html",
+        # 百万英才汇南粤|东莞市樟木头医院2026年编外人员招聘，报名2026-04-13至04-26已截止（2026-09-21 核查正文确认）
+        "http://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4522897.html",
+        # 广州市白云区卫健系统2026年公开招聘（第一批）【另一路径页面】，7月发布报名已截止（2026-09-21 核查确认）
+        "https://www.by.gov.cn/ywdt/tzgg/content/post_10902497.html",
+        # 东莞市南城社区卫生服务中心（康强医疗人才网聚合页，所列岗位全部显示"已结束"）（2026-09-21 核查确认）
+        "https://3g.kq36.com/25/c-7062",
+    ]
 }
 
 
@@ -174,7 +212,7 @@ def check_url_alive(url):
     if not url or not str(url).startswith("http"):
         return "dead"
     base_url = str(url).split("#")[0]
-    if base_url in MANUAL_DEAD_URLS:
+    if _norm_url(base_url) in MANUAL_DEAD_URLS:
         return "dead"
     try:
         r = requests.get(
@@ -335,12 +373,20 @@ def _drop_expired(jobs):
 
 
 def _drop_wrong_city(jobs):
-    """剔除城市不在 广州/东莞 范围内的岗位（含标题中出现外地城市但 city 字段误标的情况）。"""
+    """剔除城市不在 广州/东莞 范围内的岗位（含标题中出现外地城市/省份但 city 字段误标的情况）。"""
     other_cities = [
         # 省外主要城市
         "北京", "上海", "深圳", "武汉", "长沙", "成都", "重庆", "杭州",
         "南京", "西安", "郑州", "福州", "昆明", "贵阳", "南昌", "合肥",
-        "天津", "苏州", "青岛", "济南", "厦门",
+        "天津", "苏州", "青岛", "济南", "厦门", "宁波", "温州", "无锡",
+        "常州", "徐州", "石家庄", "太原", "沈阳", "大连", "长春", "哈尔滨",
+        "南宁", "海口", "三亚", "兰州", "银川", "西宁", "乌鲁木齐", "呼和浩特",
+        "拉萨", "绵阳", "襄阳", "宜昌",
+        # 省/自治区名（标题出现即外地；广东省本身不在其列）
+        "四川", "湖北", "湖南", "浙江", "江苏", "安徽", "福建", "河南",
+        "河北", "陕西", "山西", "辽宁", "吉林", "黑龙江", "江西", "广西",
+        "云南", "贵州", "甘肃", "宁夏", "新疆", "西藏", "内蒙古", "青海",
+        "海南",
         # 广东非东莞/广州城市（阳江岗位混入东莞标签等场景）
         "佛山", "惠州", "珠海", "中山", "江门", "阳江", "湛江", "茂名",
         "汕头", "梅州", "清远", "韶关", "揭阳", "潮州", "汕尾", "河源",
@@ -438,6 +484,99 @@ def _drop_stale_jobs(jobs):
     return kept
 
 
+def _host_of(url):
+    """取 URL 的主机名（规范化后）。"""
+    return _norm_url(url).split("/")[0]
+
+
+def _is_thirdparty(url):
+    host = _host_of(url)
+    return any(host == h or host.endswith("." + h) for h in THIRDPARTY_HOSTS)
+
+
+def _drop_undated_thirdparty(jobs):
+    """剔除第三方人才网的无日期条目：发布/截止日期都抓不到时无法验证时效，一律不收。"""
+    kept = []
+    for j in jobs:
+        if _is_thirdparty(j.get("url", "")) and not j.get("publish_date") and not j.get("deadline"):
+            print(f"[no-date] 剔除无日期第三方条目: {(j.get('title') or '')[:32]} -> {_host_of(j.get('url', ''))}")
+            continue
+        kept.append(j)
+    return kept
+
+
+_DATE_SEP = re.compile(r"(20\d{2})\s*[年./\-]\s*(\d{1,2})\s*[月./\-]\s*(\d{1,2})")
+
+
+def _page_reg_deadline(url):
+    """抓页面正文，从"报名…"段落里取最晚日期作为报名截止日。失败/无匹配返回 None。"""
+    try:
+        r = requests.get(
+            url,
+            headers={"User-Agent": _UA, "Accept-Language": "zh-CN,zh;q=0.9"},
+            timeout=18,
+            verify=False,
+            allow_redirects=True,
+        )
+        if r.status_code >= 400:
+            return None
+        text = re.sub(r"<[^>]+>", " ", r.text or "")
+        text = re.sub(r"\s+", "", text)  # 政府站点日期常被标签/空格拆开，去空白后再匹配
+        best = None
+        for m in re.finditer(r"报名[^。；]{0,160}", text):
+            for y, mo, d in _DATE_SEP.findall(m.group(0)):
+                try:
+                    dt = datetime(int(y), int(mo), int(d)).date()
+                except Exception:
+                    continue
+                if best is None or dt > best:
+                    best = dt
+        return best
+    except Exception:
+        return None
+
+
+def _needs_reg_check(j):
+    """仅对"政府官网公告页 + 无未来截止日期"的条目做正文核查，控制请求量。"""
+    url = j.get("url") or ""
+    if "gov.cn" not in _host_of(url):
+        return False
+    ddl = j.get("deadline")
+    if ddl:
+        try:
+            if datetime.strptime(str(ddl)[:10], "%Y-%m-%d").date() >= datetime.now().date():
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def _drop_deadline_passed(jobs):
+    """正文报名窗口核查：公告正文写明报名期且已结束的，直接剔除。
+
+    这类公告的截止日期往往藏在正文（Tavily 摘要抓不到），仅靠 deadline 字段
+    会漏网（如南沙 9-20 截止、樟木头 4 月截止的公告）。
+    """
+    targets = [j for j in jobs if _needs_reg_check(j)]
+    if not targets:
+        return jobs
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        results = list(ex.map(lambda j: _page_reg_deadline(j.get("url", "")), targets))
+    today = datetime.now().date()
+    closed = {}
+    for j, dl in zip(targets, results):
+        if dl and dl < today:
+            closed[_norm_url(j.get("url", ""))] = dl
+    kept = []
+    for j in jobs:
+        dl = closed.get(_norm_url(j.get("url", "")))
+        if dl:
+            print(f"[reg-deadline] 剔除报名已截止({dl}): {(j.get('title') or '')[:32]}")
+            continue
+        kept.append(j)
+    return kept
+
+
 def fetch_jobs(api_key=None, queries=None, days=45, max_per_query=10):
     """
     主入口：搜索、清洗、合并，返回 jobs 列表。
@@ -476,6 +615,10 @@ def fetch_jobs(api_key=None, queries=None, days=45, max_per_query=10):
             blob = " ".join([item.get("title") or "", (item.get("description") or "")[:300]])
             if any(k in blob for k in RESULT_NOTICE_KWS):
                 print(f"[notice] 丢弃结果公示: {item.get('title', '')[:35]}")
+                continue
+            # 第三方人才网的无日期条目：无法验证时效，不收
+            if _is_thirdparty(url) and not item.get("publish_date") and not item.get("deadline"):
+                print(f"[no-date] 丢弃无日期第三方结果: {item.get('title', '')[:30]} -> {url[:70]}")
                 continue
             # 新岗位入库前先体检链接，死链直接丢弃
             if check_url_alive(item.get("url", "")) == "dead":
@@ -540,12 +683,14 @@ def build_jobs_data(tavily_items=None):
                 final_map[j["url"]] = j
 
     jobs = list(final_map.values())
-    # 五重清理：聚合页 -> 外地 -> 结果公示 -> 已截止/陈旧 -> 死链（每日复检旧岗位）
+    # 清理链：聚合页 -> 外地 -> 结果公示 -> 已截止/陈旧 -> 无日期第三方 -> 正文报名窗口核查 -> 死链复检
     jobs = _drop_agg_jobs(jobs)
     jobs = _drop_wrong_city(jobs)
     jobs = _drop_result_notices(jobs)
     jobs = _drop_expired(jobs)
     jobs = _drop_stale_jobs(jobs)
+    jobs = _drop_undated_thirdparty(jobs)
+    jobs = _drop_deadline_passed(jobs)
     jobs = _drop_dead_jobs(jobs, label="daily")
 
     # 排序：编内优先，有发布日期按新到旧
