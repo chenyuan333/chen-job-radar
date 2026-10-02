@@ -1,7 +1,21 @@
 {
-  "updated_at": "2026-10-01T04:40:47",
-  "total": 3,
+  "updated_at": "2026-10-02T04:34:51",
+  "total": 4,
   "jobs": [
+    {
+      "title": "“百万英才汇南粤”东莞市2025年11月公开招聘事业编制教师 ...",
+      "hospital": "",
+      "url": "https://edu.dg.gov.cn/flfw/jsgl/rsxx/content/post_4455630.html",
+      "category": "体检科",
+      "city": "东莞",
+      "reliability": "官方",
+      "has_bianzhi": true,
+      "publish_date": "2026-08-31",
+      "deadline": null,
+      "source": "tavily:东莞市教育局 校医 招聘 2026",
+      "description": "一、招聘岗位、薪酬和对象(一)招聘 ・ 并须在2026年8月31日前取得・ 东莞在职在编教职员和已获得东莞市教育局公开招聘拟聘资格(体检后)的人员不在本次招",
+      "status": "active"
+    },
     {
       "title": "体检科医师 FY007",
       "hospital": "东莞市妇幼保健院",
