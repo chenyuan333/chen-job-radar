@@ -12,6 +12,7 @@ import requests
 import urllib3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -54,6 +55,15 @@ DEFAULT_SEARCH_QUERIES = [
     ("东莞市教育局 校医 招聘 2026", "东莞"),
     ("广州市卫生健康委员会 公开招聘 2026", "广州"),
     ("广州市市属事业单位 医疗卫生 招聘公告 2026", "广州"),
+    # 广州各区卫健系统编内批次（区级招考，往年在官网页面上、搜索引擎覆盖差）
+    ("site:haizhu.gov.cn 卫生健康系统 公开招聘", "广州"),
+    ("广州市 区 卫生健康系统 公开招聘 事业编制 2026", "广州"),
+    ("site:wjw.gz.gov.cn 公开招聘 引进 急需专业人才", "广州"),
+    ("广州市 事业编制 医疗卫生机构 招聘 公告 2026年", "广州"),
+    ("广州市 区属医院 招聘 编制内 医师 2026", "广州"),
+    # 微信公众号渠道（粤卫人才医招 / 广东中公医疗卫生考试 等转载源）
+    ("粤卫人才医招 招聘公告 2026", "广州"),
+    ("广东中公医疗卫生 招聘公告 2026", "广州"),
 ]
 
 ALLOWED_CITIES = ["东莞", "广州"]
@@ -68,11 +78,14 @@ AGG_URL_PATTERNS = [
     "gaoxiaojob.com/column/",        # 高校人才网"XX专区"栏目聚合页（全国双一流/本科高校专区等）
     "gaoxiaojob.com/zhaopin/",       # 高校人才网招聘频道页
     "gaoxiaojob.com/announcement/job-list",  # 高校人才网职位列表聚合页（一次列多单位岗位）
+    "gaoxiaojob.com/job/",           # 高校人才网单个职位转载页（官方源已覆盖，避免重复推荐）
     "fenbi.com/page/positions",      # 粉笔岗位/职位表列表页（聚合多个单位岗位）
     "fenbi.com/page/fenxiaozhaokao",  # 粉笔分校招考页
     "liepin.com/zp",                 # 猎聘聚合页（/zp拼音 串）；具体职位页是 /job/ 开头
     "jobmd.cn/zhaopin/",             # 丁香人才频道页（具体职位是 /work/）
     "zhaopin.com/sou/",              # 智联招聘搜索/聚合页（/sou/ 开头是搜索结果列表）
+    "zhipin.com",                    # BOSS直聘（岗位聚合页，点进去是全国/混合岗位列表）
+    "lagou.com",                     # 拉勾网（聚合页，且多为非医师岗）
     "kq36.com",                      # 康强医疗人才网（聚合页，所辖岗位多为历史批次，页面常标"已结束"）
     "jrzp.com",                      # 今日招聘网（转载聚合站，时效不可信）
     "wondercv.com",                  # 简历网站的职业科普/求职指南文章，非招聘
@@ -85,6 +98,7 @@ AGG_URL_PATTERNS = [
 THIRDPARTY_HOSTS = (
     "gaoxiaojob.com", "fenbi.com", "liepin.com", "jobmd.cn", "zhaopin.com",
     "kq36.com", "jrzp.com", "yzp.cn", "med66.com", "51job.com", "wondercv.com",
+    "zhipin.com", "lagou.com", "yixuezp.com",
 )
 AGG_TITLE_PATTERNS = [
     "招聘信息汇总", "招聘信息】", "招聘网_", "_最新", "招聘公告_", "汇总",
@@ -103,6 +117,75 @@ NON_JOB_TITLE_KWS = [
 # 结果公示类关键词（招聘已结束，页面是拟聘用/成绩公示，不是在招岗位）
 # 注意：不要用"体检考察"这类词——正常招聘公告的流程描述里也有"体检、考察"
 RESULT_NOTICE_KWS = ["拟聘用", "聘用公示", "成绩公示", "拟聘人员"]
+
+# 公告已进入招聘后续流程（报名早已结束）——只在标题层判断，避免误伤正文流程描述
+POST_STAGE_KWS = [
+    "资格复审", "复审程序", "入围", "面试有关", "面试事项", "体检人员", "体检名单",
+    "考察对象", "准考证", "笔试成绩", "拟聘用", "拟聘人员", "拟录用", "拟补录",
+    "录用名单", "聘用公示", "成绩公示", "结果公示", "名单公告",
+]
+
+# 官方栏目直抓时，公告必须与医疗岗位相关（区级栏目常混有街道办聘员、政府雇员等非医疗岗位）
+MEDICAL_HINT_KWS = [
+    "卫生健康", "卫健", "医院", "医疗", "医师", "医生", "社区卫生", "疾控",
+    "疾病预防控制", "卫生院", "校医", "护理", "临床", "医学", "公共卫生",
+    "心电图", "体检", "全科",
+]
+# 正文层面的强医疗特征（用于标题不含医疗词时进一步确认，避免"体检、考察"等流程描述误判）
+STRONG_MEDICAL_KWS = [
+    "卫生健康局", "卫生健康委员会", "卫生健康系统", "医院", "社区卫生服务中心",
+    "疾病预防控制中心", "卫生院", "校医", "执业医师", "临床医学", "公共卫生",
+]
+
+# 栏目页里的非招聘政务文件/采购类公告
+NON_RECRUIT_TITLE_KWS = [
+    "考务服务", "比选", "采购", "中标", "成交", "招标", "询价",
+    "征求意见", "意见的公告", "座谈", "培训通知", "会议通知",
+]
+
+# ── 官方栏目直抓 ─────────────────────────────────────────
+# 直接抓官方招聘公告栏目列表页，解析出具体公告详情页。
+# 关键：绕开搜索摘要（Tavily 抓不到政府公告正文里的报名窗口），从源头拿权威信息。
+OFFICIAL_FEEDS = [
+    {
+        "name": "东莞市卫生健康局·编制内人员招聘",
+        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/zpgg/",
+        "city": "东莞",
+    },
+    {
+        "name": "东莞市卫生健康局·编制外人员招聘",
+        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/",
+        "city": "东莞",
+    },
+    {
+        "name": "广州市卫生健康委员会·通知公告",
+        "url": "http://wjw.gz.gov.cn/xxgk/tzgg/",
+        "city": "广州",
+    },
+    {
+        "name": "广州市海珠区人社局·考试招聘",
+        "url": "https://www.haizhu.gov.cn/gzjg/qzf/hzqrsj/kszp",
+        "city": "广州",
+    },
+    {
+        "name": "广州市白云区·招考信息",
+        "url": "https://www.by.gov.cn/zwgk/zdlyxxgkzl/jycyxxgkzl/zpxx/",
+        "city": "广州",
+    },
+    {
+        "name": "广州市番禺区·招考信息",
+        "url": "http://www.panyu.gov.cn/zwgk/rsgk/zkxx/index.html",
+        "city": "广州",
+    },
+    {
+        "name": "广州市花都区卫生健康局·公告栏",
+        "url": "https://www.huadu.gov.cn/gzjg/qzfgzbm/qwsjkj/ggl/",
+        "city": "广州",
+    },
+]
+
+# 列表页中属于"具体公告详情页"的链接特征（用于剔除栏目页/首页链接）
+_DETAIL_URL_KWS = ("/content/post_", "/content/", "/info/", "/detail/")
 
 # 陈旧公告阈值：无未来截止日期 + 发布超过该天数 -> 视为过期剔除
 STALE_DAYS = 45
@@ -329,15 +412,19 @@ def _parse_tavily_result(res, query):
     if ddl:
         item["deadline"] = ddl
 
-    # 报名窗口兜底：公告正文常写"报名时间为 X月X日至 X月X日"，
-    # Tavily 摘要带报名截止但 parser 未识别时，手动提取作为 deadline
-    if not item.get("deadline") and content:
-        m = re.search(r"报名(?:时间|期)?[为是]?[^。]{0,90}?[至到—\-]\s*(?:20\d{2}年?)?(\d{1,2})月(\d{1,2})日", content)
+    # 报名窗口：公告常写"报名时间为 X月X日至 X月X日"。
+    # 取窗口"末端"作为截止日，并优先于 parser 的日期猜测
+    # （parser 可能把报名首日误当截止日，导致在招岗位被当成已截止剔除）。
+    if content:
+        m = re.search(
+            r"报名(?:时间|期)?[为是]?[^。]{0,90}?[至到—\-]\s*(?:20\d{2}年?)?(\d{1,2})月(\d{1,2})日",
+            content,
+        )
         if m:
             month, day = int(m.group(1)), int(m.group(2))
-            if datetime.now().year == 2026 and 1 <= month <= 12 and 1 <= day <= 31:
-                item["deadline"] = f"2026-{month:02d}-{day:02d}"
-                print(f"[deadline] 报名窗口提取: {item.get('title','')[:24]} -> {item['deadline']}")
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                item["deadline"] = f"{datetime.now().year}-{month:02d}-{day:02d}"
+                print(f"[deadline] 报名窗口末端: {item.get('title','')[:24]} -> {item['deadline']}")
 
     # 分类
     item["category"] = parser.categorize(title + " " + content[:500])
@@ -422,6 +509,15 @@ def _is_agg_job(j):
         return "泛化标题"
     if any(k in title for k in NON_JOB_TITLE_KWS):
         return "非招聘岗位"
+    # 采购/考务/征求意见等政务文件，不是招聘岗位（如"公开招聘考务服务项目比选结果的公示"）
+    if any(k in title for k in NON_RECRUIT_TITLE_KWS):
+        return "政务采购类"
+    # 教师招聘等非医疗岗位（校医/医疗卫生类公告不受影响）
+    if "教师" in title and not any(k in title for k in ("校医", "医师", "医疗", "卫生")):
+        return "非医疗岗位"
+    # 招聘已进入后续流程的公告（复审/面试/体检/名单），报名早已结束
+    if any(k in title for k in POST_STAGE_KWS):
+        return "招聘后续流程公告"
     return None
 
 
@@ -577,6 +673,250 @@ def _drop_deadline_passed(jobs):
     return kept
 
 
+_ANCHOR_RE = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.S | re.I)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _fetch_html(url, timeout=20):
+    """抓取页面 HTML，自动尝试 utf-8 / gbk 解码（政府站点多为 GBK）。"""
+    try:
+        r = requests.get(
+            url,
+            headers={"User-Agent": _UA, "Accept-Language": "zh-CN,zh;q=0.9"},
+            timeout=timeout,
+            verify=False,
+            allow_redirects=True,
+        )
+        if r.status_code >= 400:
+            return None
+        raw = r.content
+        for enc in ("utf-8", "gbk", "gb18030"):
+            try:
+                return raw.decode(enc)
+            except Exception:
+                continue
+        return raw.decode("utf-8", "ignore")
+    except Exception:
+        return None
+
+
+def _list_feed_announcements(feed, limit=15):
+    """抓官方栏目列表页，解析出具体公告详情页的 (url, title) 列表。"""
+    html = _fetch_html(feed["url"])
+    if not html:
+        print(f"[feed] 列表页无法访问: {feed['name']}")
+        return []
+    base = feed["url"]
+    out, seen = [], set()
+    for href, inner in _ANCHOR_RE.findall(html):
+        title = re.sub(r"\s+", "", _TAG_RE.sub("", inner)).strip()
+        if len(title) < 10:
+            continue
+        if not any(k in title for k in ("招聘", "公告", "招考", "引进")):
+            continue
+        full = urljoin(base, href.strip())
+        # 只保留具体公告详情页，剔除栏目页/首页链接
+        if not any(k in full for k in _DETAIL_URL_KWS):
+            continue
+        if not full.startswith("http") or full in seen:
+            continue
+        seen.add(full)
+        out.append((full, title))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _feed_announcement_ok(title):
+    """标题层快速排除：非招聘政务文件、后续流程公告、采购文件、非医疗岗位。"""
+    # 必须是招聘类公告（栏目页里混有"职权调整""实施意见"等纯政务公告）
+    if not any(k in title for k in ("招聘", "招考", "招录", "选聘", "引进")):
+        return "非招聘政务公告"
+    if any(k in title for k in POST_STAGE_KWS):
+        return "招聘后续流程公告"
+    if any(k in title for k in RESULT_NOTICE_KWS):
+        return "结果公示"
+    if any(k in title for k in NON_RECRUIT_TITLE_KWS):
+        return "政务采购类"
+    if any(k in title for k in NON_JOB_TITLE_KWS):
+        return "非招聘岗位"
+    if "教师" in title and not any(k in title for k in ("校医", "医师", "医疗", "卫生")):
+        return "非医疗岗位"
+    return None
+
+
+def _parse_official_announcement(url, title, feed):
+    """把官方公告详情页解析成岗位条目；不属于在招岗位时返回 None。"""
+    why = _feed_announcement_ok(title)
+    if why:
+        return None
+    html = _fetch_html(url)
+    if not html:
+        return None
+
+    # 先去 <script>/<style> 整块，避免页内脚本污染摘要
+    body_html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+    raw = re.sub(r"\s+", " ", _TAG_RE.sub(" ", body_html))
+    compact = re.sub(r"\s+", "", raw)
+
+    # 先提取正文摘要（跳过导航/页脚），后续相关性判定与描述都用它
+    snippet = _extract_body_snippet(raw, title)
+
+    # 正文里也出现公示类表述的，同样剔除
+    if any(k in compact[:3000] for k in RESULT_NOTICE_KWS):
+        return None
+
+    # 医疗相关性：区级招考栏目常混有街道办聘员、政府雇员等非医疗岗位。
+    # 只看标题 + 正文摘要（全页文本含导航链接，会把非医疗公告误判为医疗类）。
+    if not any(k in title for k in MEDICAL_HINT_KWS):
+        if not any(k in snippet for k in STRONG_MEDICAL_KWS):
+            print(f"[feed] 非医疗岗位，跳过: {title[:44]}")
+            return None
+
+    # 报名截止：正文"报名…"段落里的最晚日期
+    deadline = _extract_reg_deadline_from_text(compact)
+
+    # 发布日期
+    pub = None
+    m = re.search(
+        r"(?:发布日期|发布时间|发文日期|时间)[：:\s]*(20\d{2})[年./\-](\d{1,2})[年./\-](\d{1,2})",
+        compact,
+    )
+    if m:
+        try:
+            pub = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).strftime("%Y-%m-%d")
+        except Exception:
+            pub = None
+
+    # 时效判断：必须能确认"未来仍可报名"，否则不收（避免推荐过期岗位）
+    today = datetime.now().date()
+    if deadline:
+        if deadline < today:
+            print(f"[feed] 报名已截止({deadline}): {title[:40]}")
+            return None
+    elif pub:
+        try:
+            p = datetime.strptime(pub, "%Y-%m-%d").date()
+            if (today - p).days > STALE_DAYS:
+                print(f"[feed] 陈旧公告(发布于{pub}): {title[:40]}")
+                return None
+        except Exception:
+            return None
+    else:
+        print(f"[feed] 无法确认时效，跳过: {title[:40]}")
+        return None
+
+    # 类别判定（用标题 + 正文摘要，避免导航文字干扰）
+    cat = parser.categorize(title + " " + snippet)
+    if cat == "其他":
+        if any(k in title + snippet for k in ("卫生健康", "卫健", "医院", "医疗", "卫生")):
+            cat = "卫健委"       # 卫健系统统一招聘公告（含多家医院多岗位）
+        else:
+            return None
+    if cat not in ("体检科", "心电图", "社区医师", "校医", "心血管内科", "AI医疗", "卫健委", "疾控中心"):
+        return None
+
+    desc = snippet or f"来源：{feed['name']}"
+
+    # 医院名：公告标题里常含"XX医院/XX社区卫生服务中心"
+    hm = re.search(r"([\u4e00-\u9fa5]{2,14}(?:医院|社区卫生服务中心|疾控中心|卫生服务中心))", title)
+    hospital = hm.group(1) if hm else feed["name"].split("·")[0]
+
+    return {
+        "title": title[:80],
+        "hospital": hospital,
+        "city": feed["city"],
+        "category": cat,
+        "url": url,
+        "source": feed["name"],
+        "publish_date": pub or "",
+        "deadline": deadline.strftime("%Y-%m-%d") if deadline else "",
+        "has_bianzhi": parser.detect_bianzhi(title + " " + compact[:4000]),
+        "reliability": "官方",
+        "description": desc[:400],
+        "status": "active",
+    }
+
+
+# 政府网页导航/页脚特征词（摘要里出现即说明截到了导航区，需跳过）
+_NAV_JUNK_KWS = [
+    "无障碍", "长者助手", "网站支持IPv6", "千人千页", "搜索位置", "我的收藏",
+    "打印页面", "关闭页面", "网站地图", "要闻动态", "政务服务", "互动交流",
+    "统一登录", "网站标识码", "主办单位", "版权", "联系我们",
+]
+
+
+def _clean_snippet(s):
+    """清理正文片段里的脚本残留、样式符号。"""
+    s = s.replace("&nbsp;", " ")
+    s = re.sub(r"\$\([^)]{0,60}\)[\s\S]{0,80}", " ", s)                # jQuery 残留
+    s = re.sub(r"(?:document|window|function|var|return)\b[\s\S]{0,60}?[;}]", " ", s)
+    s = re.sub(r"[{}<>]+", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip(" ·|-—_")
+
+
+def _extract_body_snippet(raw, title, width=420):
+    """从公告页正文中截取可读摘要（跳过导航栏/页脚/脚本残留）。"""
+    key = re.sub(r"\s+", "", title)[:12]
+    starts = [m.start() + len(key) for m in re.finditer(re.escape(key), raw)] if key else []
+    for start in starts:
+        seg = _clean_snippet(raw[start: start + width * 2])
+        head = seg[:300]
+        # 导航区/页脚：含导航特征词，或没有招聘语义
+        if any(k in head for k in _NAV_JUNK_KWS):
+            continue
+        if any(k in head for k in ("招聘", "报名", "岗位", "引进", "招考")):
+            # 跳过"发布日期/来源/浏览量/分享到"这类页头元信息，从正文首句开始
+            m2 = re.search(r"(根据|现将|为[^。]{0,24}(?:招聘|充实|加强|满足|优化))", seg[:220])
+            if m2 and m2.start() > 0:
+                seg = seg[m2.start():]
+            return seg[:width]
+    m = re.search(r"(根据[^。]{0,80}?招聘|为[^。]{0,60}?招聘|现将[^。]{0,80})", raw)
+    if m:
+        return _clean_snippet(raw[m.start(): m.start() + width * 2])[:width]
+    # 兜底：全文里第一段不含导航特征词的内容
+    for part in re.split(r"\s{2,}", raw):
+        seg = _clean_snippet(part)
+        if len(seg) > 60 and not any(k in seg[:200] for k in _NAV_JUNK_KWS):
+            return seg[:width]
+    return _clean_snippet(raw[:width * 2])[:width]
+
+
+def _extract_reg_deadline_from_text(compact):
+    """从已去空白的正文里提取"报名…"段落中的最晚日期，作为报名截止日。"""
+    best = None
+    for m in re.finditer(r"报名[^。；]{0,160}", compact or ""):
+        for y, mo, d in _DATE_SEP.findall(m.group(0)):
+            try:
+                dt = datetime(int(y), int(mo), int(d)).date()
+            except Exception:
+                continue
+            if best is None or dt > best:
+                best = dt
+    return best
+
+
+def fetch_official_jobs(feeds=None):
+    """官方栏目直抓主入口：返回解析好的岗位条目列表。"""
+    feeds = feeds or OFFICIAL_FEEDS
+    out = []
+    for feed in feeds:
+        anns = _list_feed_announcements(feed)
+        print(f"[feed] {feed['name']}: 列表页解析出 {len(anns)} 条公告")
+        for url, title in anns:
+            try:
+                item = _parse_official_announcement(url, title, feed)
+            except Exception as e:
+                print(f"[feed] 解析异常 {url[:60]}: {e}")
+                continue
+            if item:
+                out.append(item)
+                print(f"[feed] ✓ {item['city']} | {item['title'][:44]} | ddl={item['deadline'] or '无'}")
+            time.sleep(0.2)
+    return out
+
+
 def fetch_jobs(api_key=None, queries=None, days=45, max_per_query=10):
     """
     主入口：搜索、清洗、合并，返回 jobs 列表。
@@ -667,22 +1007,59 @@ def merge_jobs(existing, new):
     return list(url_to_job.values())
 
 
-def build_jobs_data(tavily_items=None):
+def _dedupe_by_title(jobs, official_urls):
+    """同一公告常同时抓到官方页与第三方转载页（标题相同、URL 不同），只保留一条。
+
+    优先保留官方直抓来源，其次保留能确认时效（有截止日）的那条。
+    """
+    slots = []
+    pos_of = {}
+    for j in jobs:
+        key = re.sub(r"\s+", "", (j.get("title") or ""))[:45] or None
+        if key is None:
+            slots.append(j)
+            continue
+        pos = pos_of.get(key)
+        if pos is None:
+            pos_of[key] = len(slots)
+            slots.append(j)
+            continue
+        prev = slots[pos]
+        prev_off = prev.get("url") in official_urls
+        new_off = j.get("url") in official_urls
+        better = (new_off and not prev_off) or (
+            new_off == prev_off and j.get("deadline") and not prev.get("deadline")
+        )
+        if better:
+            slots[pos] = j
+            print(f"[dedupe] 同公告保留更权威版本: {key[:38]}")
+        else:
+            print(f"[dedupe] 同公告去重: {key[:38]}")
+    return slots
+
+
+def build_jobs_data(tavily_items=None, official_items=None):
     """构建最终写入 jobs.json 的数据结构。"""
     existing = load_existing_jobs()
     # 以种子数据打底
     seed_map = {j["url"]: j for j in SEED_JOBS}
     existing_map = {j["url"]: j for j in existing if j.get("url")}
 
-    # 合并优先级：Tavily 新数据 > 现有 > 种子
+    # 合并优先级：官方直抓 > Tavily 新数据 > 现有 > 种子
+    # 官方直抓来自公告详情页正文核查，权威性和时效准确性都高于搜索摘要，
+    # 同一 URL 时以官方版本为准（否则搜索摘要里的错误截止日会覆盖掉正确值）。
     final_map = dict(seed_map)
     final_map.update(existing_map)
-    if tavily_items:
-        for j in tavily_items:
-            if j.get("url"):
-                final_map[j["url"]] = j
+    for j in tavily_items or []:
+        if j.get("url"):
+            final_map[j["url"]] = j
+    for j in official_items or []:
+        if j.get("url"):
+            final_map[j["url"]] = j
 
     jobs = list(final_map.values())
+    # 去重：同一公告的官方页与第三方转载页只留一条
+    jobs = _dedupe_by_title(jobs, {j.get("url") for j in (official_items or [])})
     # 清理链：聚合页 -> 外地 -> 结果公示 -> 已截止/陈旧 -> 无日期第三方 -> 正文报名窗口核查 -> 死链复检
     jobs = _drop_agg_jobs(jobs)
     jobs = _drop_wrong_city(jobs)
@@ -712,8 +1089,13 @@ def main():
     os.makedirs(PWA_DIR, exist_ok=True)
     api_key = os.environ.get("TAVILY_API_KEY")
 
+    # 1) 官方栏目直抓（权威、时效可核查，不受搜索摘要影响）
+    official_items = fetch_official_jobs()
+
+    # 2) Tavily 补充搜索（覆盖非栏目化的零散公告）
     new_items = fetch_jobs(api_key=api_key)
-    data = build_jobs_data(new_items)
+
+    data = build_jobs_data(new_items, official_items)
 
     with open(JOBS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
