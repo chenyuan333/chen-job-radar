@@ -64,6 +64,11 @@ DEFAULT_SEARCH_QUERIES = [
     # 微信公众号渠道（粤卫人才医招 / 广东中公医疗卫生考试 等转载源）
     ("粤卫人才医招 招聘公告 2026", "广州"),
     ("广东中公医疗卫生 招聘公告 2026", "广州"),
+    # 松山湖片区定向（用户在松山湖居住；管委会/社卫中心的公告多在 ssl.dg.gov.cn，JS 渲染抓不到列表，靠搜索兜底）
+    ("松山湖 社区卫生服务中心 招聘 编制外人员 公告", "东莞"),
+    ("site:ssl.dg.gov.cn 招聘 公告", "东莞"),
+    ("松山湖中心医院 招聘 医师 公告", "东莞"),
+    ("松山湖 社区医院 全科医师 招聘 2026", "东莞"),
 ]
 
 ALLOWED_CITIES = ["东莞", "广州"]
@@ -84,6 +89,9 @@ AGG_URL_PATTERNS = [
     "liepin.com/zp",                 # 猎聘聚合页（/zp拼音 串）；具体职位页是 /job/ 开头
     "jobmd.cn/zhaopin/",             # 丁香人才频道页（具体职位是 /work/）
     "zhaopin.com/sou/",              # 智联招聘搜索/聚合页（/sou/ 开头是搜索结果列表）
+    "liepin.com/company/",            # 猎聘企业主页（岗位聚合，且无报名窗口）
+    "m.liepin.com/",                 # 猎聘移动版企业页/聚合页
+    "ssl.dg.gov.cn/sslchs/",         # 松山湖社区卫生服务中心"下属单位专栏"页（栏目介绍，非招聘公告）
     "zhipin.com",                    # BOSS直聘（岗位聚合页，点进去是全国/混合岗位列表）
     "lagou.com",                     # 拉勾网（聚合页，且多为非医师岗）
     "kq36.com",                      # 康强医疗人才网（聚合页，所辖岗位多为历史批次，页面常标"已结束"）
@@ -191,45 +199,22 @@ _DETAIL_URL_KWS = ("/content/post_", "/content/", "/info/", "/detail/")
 STALE_DAYS = 45
 
 # 初始种子数据（当 jobs.json 不存在或 Tavily 失败时仍有内容展示）
+# 注意：原东莞市妇幼保健院 FY007/FY010/FY019 三条种子已于 2026-10-12 移除。
+# 该批次原始公告写"报名至 2026-11-30"，但 2026-05-22《关于报名截止时间修改的公告》
+# 把截止日提前到了 5 月 31 日（见 DEADLINE_OVERRIDES），实际早已截止。
 SEED_JOBS = [
     {
-        "title": "体检科医师 FY007",
-        "hospital": "东莞市妇幼保健院",
-        "city": "东莞",
-        "category": "体检科",
-        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY007",
-        "source": "官方公告",
-        "publish_date": "2026-02-01",
-        "deadline": "2026-11-30",
-        "has_bianzhi": False,
+        "title": "2026年广州市海珠区卫生健康系统公开招聘事业单位工作人员公告",
+        "hospital": "广州市海珠区人社局",
+        "city": "广州",
+        "category": "卫健委",
+        "url": "https://www.haizhu.gov.cn/gzjg/qzf/hzqrsj/kszp/content/post_11025879.html",
+        "source": "广州市海珠区人社局·考试招聘",
+        "publish_date": "2026-09-29",
+        "deadline": "2026-10-15",
+        "has_bianzhi": True,
         "reliability": "官方",
-        "description": "内科学硕士，副主任医师以上，50周岁以下。体检科通常为白班、无夜班。",
-    },
-    {
-        "title": "心电图医师 FY010",
-        "hospital": "东莞市妇幼保健院",
-        "city": "东莞",
-        "category": "心电图",
-        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY010",
-        "source": "官方公告",
-        "publish_date": "2026-02-01",
-        "deadline": "2026-11-30",
-        "has_bianzhi": False,
-        "reliability": "官方",
-        "description": "心血管内科学硕士，主治医师以上，40周岁以下。心电图室值班远少于临床内科。",
-    },
-    {
-        "title": "内科医师 FY019",
-        "hospital": "东莞市妇幼保健院",
-        "city": "东莞",
-        "category": "社区医师",
-        "url": "https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html#FY019",
-        "source": "官方公告",
-        "publish_date": "2026-02-01",
-        "deadline": "2026-11-30",
-        "has_bianzhi": False,
-        "reliability": "官方",
-        "description": "内科学硕士，医师以上，35周岁以下，需完成住院医师规范化培训。",
+        "description": "面向社会公开招聘 99 名事业编制工作人员，含区属医疗卫生机构及社区卫生服务中心岗位。",
     },
 ]
 
@@ -286,8 +271,47 @@ MANUAL_DEAD_URLS = {
         "https://www.by.gov.cn/ywdt/tzgg/content/post_10902497.html",
         # 东莞市南城社区卫生服务中心（康强医疗人才网聚合页，所列岗位全部显示"已结束"）（2026-09-21 核查确认）
         "https://3g.kq36.com/25/c-7062",
+        # 2026年广州市增城区卫健局下属事业单位公开招聘——页面无报名窗口，批次早已结束（2026-10-12 复核确认）
+        "http://www.zc.gov.cn/gk/rsgz/dwzp/content/post_10749247.html",
+        # 松山湖社区卫生服务中心"医联体"下属单位专栏页——栏目介绍，非招聘公告（2026-10-12 核查确认）
+        "http://ssl.dg.gov.cn/sslchs/ylt/content/post_3963745.html",
     ]
 }
+
+
+# 招聘语义关键词：标题/摘要必须含其一，否则视为栏目页/机构介绍页（如"医联体_XX社区卫生服务中心"）
+RECRUIT_SEMANTIC_KWS = ["招聘", "招考", "招录", "招人", "选聘", "选调", "引进", "招募", "补录", "纳编"]
+
+
+# 报名截止日期的**官方后续修正**（规范化 URL -> 实际截止日）
+# 背景：政府部门常在批次公告发布数周后再发一条"报名截止时间修改的公告"，
+# 原始公告正文里的截止日随之失效。若不按修正值覆盖，这类批次会挂着错误的
+# "远期截止日"长期滞留在列表里（2026-10 发现的妇幼保健院案例，虚挂 4 个月）。
+# 新增修正值时，请一并核对来源公告 URL 与核查日期。
+DEADLINE_OVERRIDES = {
+    # 来源：2026-05-22《关于报名截止时间修改的公告》
+    # http://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4541529.html
+    # "统一将以上 6 家医院纳入岗位管理编外人员招聘报名截止时间修改为 2026 年 5 月 31 日"
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4494129.html"): ("2026-05-31", "东莞市妇幼保健院"),
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4528842.html"): ("2026-05-31", "东莞市人民医院"),
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4525339.html"): ("2026-05-31", "东莞市中西医结合医院"),
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4507557.html"): ("2026-05-31", "滨海湾中心医院"),
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4507556.html"): ("2026-05-31", "东南部中心医院"),
+    _norm_url("https://dghb.dg.gov.cn/ztpd/gkzp/bzwryzp/content/post_4507553.html"): ("2026-05-31", "东部中心医院"),
+}
+
+
+def _apply_deadline_overrides(jobs):
+    """用官方后续修正公告的截止日期覆盖公告原始值（必须早于 _drop_expired 执行）。"""
+    for j in jobs:
+        hit = DEADLINE_OVERRIDES.get(_norm_url(j.get("url", "")))
+        if not hit:
+            continue
+        fixed, who = hit
+        if j.get("deadline") != fixed:
+            print(f"[ddl-fix] {who}: 原截止 {j.get('deadline') or '无'} -> 修正为 {fixed}")
+            j["deadline"] = fixed
+    return jobs
 
 
 def check_url_alive(url):
@@ -518,6 +542,11 @@ def _is_agg_job(j):
     # 招聘已进入后续流程的公告（复审/面试/体检/名单），报名早已结束
     if any(k in title for k in POST_STAGE_KWS):
         return "招聘后续流程公告"
+    # 招聘语义白名单：标题+摘要里没有任何招聘动作词的，几乎都是栏目页/介绍页
+    # （如"医联体_东莞松山湖社区卫生服务中心_管委会"这类下属单位专栏页）
+    blob = title + " " + (j.get("description") or "")[:200]
+    if not any(k in blob for k in RECRUIT_SEMANTIC_KWS):
+        return "无招聘语义"
     return None
 
 
@@ -1064,6 +1093,7 @@ def build_jobs_data(tavily_items=None, official_items=None):
     jobs = _drop_agg_jobs(jobs)
     jobs = _drop_wrong_city(jobs)
     jobs = _drop_result_notices(jobs)
+    jobs = _apply_deadline_overrides(jobs)
     jobs = _drop_expired(jobs)
     jobs = _drop_stale_jobs(jobs)
     jobs = _drop_undated_thirdparty(jobs)
