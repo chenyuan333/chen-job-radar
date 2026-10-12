@@ -25,12 +25,15 @@ import parser
 
 # Tavily 搜索关键词组合（8 类岗位 × 东莞/广州）
 DEFAULT_SEARCH_QUERIES = [
+    # ⚠ 配额纪律（2026-10-12 起）：Tavily 免费额度为 1000 credits/月。
+    # 18 个官方栏目（OFFICIAL_FEEDS）已覆盖 广州/东莞 市·区两级事业单位与卫健系统公告，
+    # 因此这里只保留"官网抓不到"的补漏查询，控制在 ≤12 条/天（× advanced 2 credits
+    # × 30 天 ≈ 720 credits/月，留出安全余量）。
+    # 已删除：东莞市卫健局/公立医院、广州卫健委/市属/各区卫健系统 等定向查询
+    #         —— 这些已由官方栏目直抓稳定覆盖，重复搜索纯属浪费配额。
     # 体检科 / 健康管理科
     ("体检科医师 招聘 2026", "东莞"),
-    ("健康管理中心医师 招聘 2026", "东莞"),
-    ("健康管理科医师 招聘 2026", "东莞"),
-    ("体检科医师 招聘 2026", "广州"),
-    ("健康管理科医师 招聘 2026 编制", "广州"),
+    ("健康管理科医师 招聘 2026", "广州"),
     # 心电图
     ("心电图医师 招聘 2026", "东莞"),
     ("心电图室医生 招聘 2026", "广州"),
@@ -40,35 +43,18 @@ DEFAULT_SEARCH_QUERIES = [
     # 心血管内科
     ("心血管内科医师 招聘 2026", "东莞"),
     ("心血管内科医生 招聘 2026", "广州"),
-    # 校医
+    # 校医（中小学编制校医走教育局/学校渠道，不在卫健系统栏目里）
     ("校医 招聘 事业编 2026", "东莞"),
     ("中小学 校医 招聘 2026 编制", "广州"),
-    # 卫健委 / 疾控
-    ("卫健委 招聘 事业编 2026", "东莞"),
-    ("疾控中心 事业编 招聘 2026", "广州"),
-    # AI 医疗 / 医学经理
+    # AI 医疗 / 医学经理（企业岗，官网无栏目可抓）
     ("AI 医疗 临床医学经理 招聘 2026", "广州"),
     ("医学经理 心血管 招聘 2026", "广州"),
-    # 定向官方渠道（提高具体公告命中率，减少聚合页噪音）
-    ("东莞市卫生健康局 招聘公告 2026", "东莞"),
-    ("东莞市公立医院 公开招聘 2026年", "东莞"),
-    ("东莞市教育局 校医 招聘 2026", "东莞"),
-    ("广州市卫生健康委员会 公开招聘 2026", "广州"),
-    ("广州市市属事业单位 医疗卫生 招聘公告 2026", "广州"),
-    # 广州各区卫健系统编内批次（区级招考，往年在官网页面上、搜索引擎覆盖差）
-    ("site:haizhu.gov.cn 卫生健康系统 公开招聘", "广州"),
-    ("广州市 区 卫生健康系统 公开招聘 事业编制 2026", "广州"),
-    ("site:wjw.gz.gov.cn 公开招聘 引进 急需专业人才", "广州"),
-    ("广州市 事业编制 医疗卫生机构 招聘 公告 2026年", "广州"),
-    ("广州市 区属医院 招聘 编制内 医师 2026", "广州"),
-    # 微信公众号渠道（粤卫人才医招 / 广东中公医疗卫生考试 等转载源）
-    ("粤卫人才医招 招聘公告 2026", "广州"),
-    ("广东中公医疗卫生 招聘公告 2026", "广州"),
-    # 松山湖片区定向（用户在松山湖居住；管委会/社卫中心的公告多在 ssl.dg.gov.cn，JS 渲染抓不到列表，靠搜索兜底）
+    # 松山湖片区定向（用户在松山湖居住；管委会/社卫中心站点为 JS 渲染，
+    # 列表页抓不到，只能靠搜索兜底）
     ("松山湖 社区卫生服务中心 招聘 编制外人员 公告", "东莞"),
-    ("site:ssl.dg.gov.cn 招聘 公告", "东莞"),
     ("松山湖中心医院 招聘 医师 公告", "东莞"),
-    ("松山湖 社区医院 全科医师 招聘 2026", "东莞"),
+    # 公众号转载源（粤卫人才医招 常早于官网转载，作为发现新公告的预警）
+    ("粤卫人才医招 招聘公告 2026", "广州"),
 ]
 
 ALLOWED_CITIES = ["东莞", "广州"]
@@ -99,9 +85,11 @@ AGG_URL_PATTERNS = [
     "wondercv.com",                  # 简历网站的职业科普/求职指南文章，非招聘
     "yzp.cn/zhaopingonggao",         # 医招网公告列表页
     "med66.com",                     # 医学教育网全国卫生事业编汇总
-    "wjw.gz.gov.cn/xxgk/",           # 卫健委人事信息栏目页（列表非具体公告）
     "/gkmlpt/index",                 # 信息公开平台首页/栏目页
 ]
+# 注意：不要再按"整段路径"拉黑政府网站栏目，例如曾用 "wjw.gz.gov.cn/xxgk/" 拉黑
+# 广州市卫健委人事信息栏目页，结果把 wjw.gz.gov.cn/xxgk/rsxx/content/post_XXXX.html
+# 这类**真实公告详情页**一起杀掉了 → 改为下面的"栏目页URL"通用判定。
 # 第三方人才网域名：条目无任何日期（发布/截止）时无法验证时效，一律不收
 THIRDPARTY_HOSTS = (
     "gaoxiaojob.com", "fenbi.com", "liepin.com", "jobmd.cn", "zhaopin.com",
@@ -143,6 +131,13 @@ MEDICAL_HINT_KWS = [
 STRONG_MEDICAL_KWS = [
     "卫生健康局", "卫生健康委员会", "卫生健康系统", "医院", "社区卫生服务中心",
     "疾病预防控制中心", "卫生院", "校医", "执业医师", "临床医学", "公共卫生",
+]
+# 高特异性医疗词：命中 1 次即可认定医疗相关（用于省级/市级统考总公告这类
+# "多岗位汇总"公告的召回，这类公告标题常只有"事业单位集中公开招聘"字样）
+HIGH_SPECIFIC_MEDICAL_KWS = [
+    "卫生健康", "社区卫生服务中心", "社区卫生服务站", "卫生服务中心",
+    "疾病预防控制中心", "卫生院", "校医", "执业医师", "临床医学", "公共卫生",
+    "人民医院", "中医院", "妇幼保健", "疾控中心", "医师岗位", "医疗岗",
 ]
 
 # 栏目页里的非招聘政务文件/采购类公告
@@ -190,6 +185,83 @@ OFFICIAL_FEEDS = [
         "url": "https://www.huadu.gov.cn/gzjg/qzfgzbm/qwsjkj/ggl/",
         "city": "广州",
     },
+    # ── 2026-10-12 扩充：东莞人社/市政府 + 广东省人社厅 + 广州其余各区 ──
+    # 带 prefilter_medical 标记的为"综合类招考栏目"（混有街道聘员/教师/环卫等），
+    # 先做标题层医疗预判再抓详情页，节省大量无效请求。
+    {
+        "name": "东莞市人力资源和社会保障局·编制外人员招聘",
+        "url": "https://dghrss.dg.gov.cn/xwzx/gsgg/gkzp/bzwryzp/",
+        "city": "东莞",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "东莞市人民政府·招考信息",
+        "url": "https://www.dg.gov.cn/zwgk/zfgb/zkxx/",
+        "city": "东莞",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广东省人力资源和社会保障厅·事业单位招聘公告",
+        "url": "https://hrss.gd.gov.cn/zwgk/sydwzp/zpgg/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市荔湾区·招聘信息",
+        "url": "http://www.lw.gov.cn/ywdt/lwzp/index.html",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市黄埔区·招聘公告",
+        "url": "http://www.hp.gov.cn/xwzx/tzgg/zpgg/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市增城区·单位招聘",
+        "url": "http://www.zc.gov.cn/gk/rsgz/dwzp/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市越秀区·招聘公告",
+        "url": "https://www.yuexiu.gov.cn/zwgk/rsxx/gkzkzp/zpgg/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    # ── 2026-10-12 二轮扩充：补东莞编内 + 广州卫健委人事信息栏 + 从化/南沙 ──
+    {
+        "name": "东莞市人力资源和社会保障局·编制内人员招聘",
+        "url": "https://dghrss.dg.gov.cn/xwzx/gsgg/gkzp/zpgg/",
+        "city": "东莞",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市卫生健康委员会·人事信息",
+        "url": "http://wjw.gz.gov.cn/xxgk/rsxx/",
+        "city": "广州",
+    },
+    {
+        "name": "广州市从化区·公告公示",
+        "url": "https://www.conghua.gov.cn/zwgk/gggs/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+    {
+        "name": "广州市南沙区·通知公告",
+        "url": "https://www.gzns.gov.cn/zwgk/tzgg/",
+        "city": "广州",
+        "prefilter_medical": True,
+    },
+]
+
+# 综合类招考栏目里，标题必须命中这些词才值得抓详情页
+# （医疗岗位公告标题几乎必含"医院/卫生健康/事业单位"等，反之街道聘员/环卫/教师可安全跳过）
+OFFICIAL_PREFILTER_KWS = [
+    "医院", "医疗", "医师", "医生", "卫生健康", "卫健", "卫生", "社区卫生",
+    "疾控", "疾病预防", "卫生院", "校医", "公共卫生", "临床", "医学", "体检",
+    "心电图", "事业单位",
 ]
 
 # 列表页中属于"具体公告详情页"的链接特征（用于剔除栏目页/首页链接）
@@ -359,8 +431,14 @@ def _drop_dead_jobs(jobs, label="existing"):
     return kept
 
 
+_TAVILY_QUOTA_DEAD = False   # 一旦命中配额耗尽(432)，后续查询直接短路，不再空打请求
+
+
 def _tavily_search_one(query, api_key, max_results=8, days=60):
-    """调用 Tavily API 搜索一次。"""
+    """调用 Tavily API 搜索一次。配额耗尽时快速失败并置全局标记。"""
+    global _TAVILY_QUOTA_DEAD
+    if _TAVILY_QUOTA_DEAD:
+        return None
     try:
         r = requests.post(
             "https://api.tavily.com/search",
@@ -375,6 +453,11 @@ def _tavily_search_one(query, api_key, max_results=8, days=60):
             },
             timeout=30,
         )
+        if r.status_code == 432:
+            _TAVILY_QUOTA_DEAD = True
+            print("[tavily] ⚠ 配额已用尽（HTTP 432 / exceeds your plan's set usage limit），"
+                  "本次跳过全部搜索，仅使用官方栏目直抓结果")
+            return None
         if r.status_code != 200:
             print(f"[tavily warn] {query} -> HTTP {r.status_code}")
             return None
@@ -527,6 +610,11 @@ def _is_agg_job(j):
             return "官网首页"
     except Exception:
         pass
+    # 栏目/列表页：URL 以目录或 index 页结尾（如 wjw.gz.gov.cn/xxgk/rsxx/、.../zpgg/index.html）
+    # 只按"结尾形态"判定，不按"是否含详情特征"反推 —— 后者会误杀 /t20261010_12345.html
+    # 这类没有 post_/content 特征的具体公告
+    if url.endswith("/") or re.search(r"/index\.(?:s?html?|jsp|php|aspx)$", url):
+        return "栏目页URL"
     if any(p in title for p in AGG_TITLE_PATTERNS):
         return "聚合页标题"
     if title in GENERIC_TITLES:
@@ -729,7 +817,7 @@ def _fetch_html(url, timeout=20):
         return None
 
 
-def _list_feed_announcements(feed, limit=15):
+def _list_feed_announcements(feed, limit=12):
     """抓官方栏目列表页，解析出具体公告详情页的 (url, title) 列表。"""
     html = _fetch_html(feed["url"])
     if not html:
@@ -779,6 +867,9 @@ def _parse_official_announcement(url, title, feed):
     why = _feed_announcement_ok(title)
     if why:
         return None
+    # 综合类招考栏目：标题层先做医疗预判，避免为街道聘员/环卫/教师等白抓详情页
+    if feed.get("prefilter_medical") and not any(k in title for k in OFFICIAL_PREFILTER_KWS):
+        return None
     html = _fetch_html(url)
     if not html:
         return None
@@ -788,17 +879,23 @@ def _parse_official_announcement(url, title, feed):
     raw = re.sub(r"\s+", " ", _TAG_RE.sub(" ", body_html))
     compact = re.sub(r"\s+", "", raw)
 
-    # 先提取正文摘要（跳过导航/页脚），后续相关性判定与描述都用它
-    snippet = _extract_body_snippet(raw, title)
+    # 先提取正文摘要（跳过导航/页脚），长版用于相关性判定，短版用于展示描述
+    snippet_long = _extract_body_snippet(raw, title, width=2500)
+    snippet = snippet_long[:420]
 
     # 正文里也出现公示类表述的，同样剔除
     if any(k in compact[:3000] for k in RESULT_NOTICE_KWS):
         return None
 
     # 医疗相关性：区级招考栏目常混有街道办聘员、政府雇员等非医疗岗位。
-    # 只看标题 + 正文摘要（全页文本含导航链接，会把非医疗公告误判为医疗类）。
+    # 只判定标题 + 正文（全页文本含导航链接，会把非医疗公告误判为医疗类）。
+    # 省级/市级统考总公告标题往往只有"事业单位集中公开招聘"，需靠正文召回。
     if not any(k in title for k in MEDICAL_HINT_KWS):
-        if not any(k in snippet for k in STRONG_MEDICAL_KWS):
+        if any(k in snippet_long for k in HIGH_SPECIFIC_MEDICAL_KWS):
+            pass                                  # 高特异性医疗词命中，认定医疗类
+        elif sum(snippet_long.count(k) for k in STRONG_MEDICAL_KWS) >= 2:
+            pass                                  # 普通医疗词密集出现（多岗位汇总公告）
+        else:
             print(f"[feed] 非医疗岗位，跳过: {title[:44]}")
             return None
 
